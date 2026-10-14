@@ -1,0 +1,6 @@
+{
+  "name": "GameVault - Diário de Jogos Zerados",
+  "description": "Aplicativo para cadastrar e gerenciar jogos zerados com busca automática na internet, capas, estatísticas detalhadas por ano e mês, matriz de notas e dificuldade, e backup.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
