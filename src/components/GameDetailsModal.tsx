@@ -11,7 +11,9 @@ import {
   Heart, 
   Sparkles,
   Layers,
-  Building
+  Building,
+  PenLine,
+  MessageSquareQuote
 } from 'lucide-react';
 import { Game } from '../types';
 
@@ -170,18 +172,26 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
           )}
 
           {/* Personal Review / Notes */}
-          <div>
-            <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Suas Notas e Análise Pessoal
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/20 via-zinc-950 to-zinc-950 border border-purple-500/25 space-y-2">
+            <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+              <PenLine className="w-3.5 h-3.5 text-purple-400" />
+              <span>Sua Análise Pessoal & Memórias</span>
             </h4>
             {game.notes ? (
-              <p className="text-xs sm:text-sm text-zinc-200 leading-relaxed bg-purple-950/15 border border-purple-500/20 p-3.5 rounded-xl whitespace-pre-wrap">
+              <div className="text-xs sm:text-sm text-zinc-200 leading-relaxed bg-zinc-950/60 border border-purple-500/20 p-3.5 rounded-xl whitespace-pre-wrap font-normal">
                 "{game.notes}"
-              </p>
+              </div>
             ) : (
-              <p className="text-xs text-zinc-500 italic">
-                Nenhuma nota pessoal cadastrada para este jogo.
-              </p>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/40 border border-zinc-800 text-xs text-zinc-500 italic">
+                <span>Nenhuma anotação ou review pessoal registrada ainda.</span>
+                <button
+                  type="button"
+                  onClick={() => onEdit(game)}
+                  className="not-italic text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer ml-2 flex-shrink-0"
+                >
+                  Adicionar review
+                </button>
+              </div>
             )}
           </div>
 

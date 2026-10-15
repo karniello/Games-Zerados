@@ -8,7 +8,8 @@ import {
   MoreVertical, 
   Edit3, 
   Trash2,
-  CheckCircle2
+  CheckCircle2,
+  PenLine
 } from 'lucide-react';
 import { Game, GameDifficulty } from '../types';
 
@@ -125,9 +126,17 @@ export const GameCard: React.FC<GameCardProps> = ({
 
         {/* Footer with date and actions */}
         <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-[11px] text-zinc-400">
-          <div className="flex items-center gap-1 text-zinc-400 truncate">
+          <div className="flex items-center gap-1.5 text-zinc-400 truncate">
             <Calendar className="w-3 h-3 text-zinc-500 flex-shrink-0" />
             <span>{formattedDate}</span>
+            {game.notes?.trim() && (
+              <span
+                className="inline-flex items-center text-purple-400 ml-0.5"
+                title="Possui review/anotações pessoais"
+              >
+                <PenLine className="w-3 h-3" />
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">

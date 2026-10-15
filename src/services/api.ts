@@ -10,6 +10,14 @@ export interface GameSearchResult {
   genres?: string[];
   averageHours?: number;
   synopsis?: string;
+  source?: string;
+}
+
+export interface SearchStatus {
+  rawgConfigured: boolean;
+  igdbConfigured: boolean;
+  geminiConfigured: boolean;
+  activeProvider: string;
 }
 
 // In-memory token storage (per security guidelines: never stored in localStorage)
@@ -34,12 +42,29 @@ function getAuthHeaders(overrideToken?: string) {
   return headers;
 }
 
-export async function searchGamesOnline(query: string): Promise<GameSearchResult[]> {
+export async function fetchSearchStatus(): Promise<SearchStatus> {
+  try {
+    const res = await fetch('/api/games/search/status');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Erro ao checar status dos provedores de busca:', err);
+  }
+  return {
+    rawgConfigured: false,
+    igdbConfigured: false,
+    geminiConfigured: false,
+    activeProvider: 'Catálogo & Web',
+  };
+}
+
+export async function searchGamesOnline(query: string, preferredProvider?: 'rawg' | 'igdb' | 'auto'): Promise<GameSearchResult[]> {
   try {
     const res = await fetch('/api/games/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query }),
+      body: JSON.stringify({ query, preferredProvider }),
     });
 
     if (!res.ok) {
@@ -60,6 +85,7 @@ export async function searchGamesOnline(query: string): Promise<GameSearchResult
         genres: ['Ação', 'Aventura'],
         averageHours: 20,
         synopsis: `Cadastro rápido de ${query}.`,
+        source: 'fallback',
       },
     ];
   }

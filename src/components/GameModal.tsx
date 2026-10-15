@@ -14,12 +14,14 @@ import {
   Loader2, 
   Check, 
   ExternalLink,
-  Heart
+  Heart,
+  PenLine,
+  MessageSquareQuote
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Game, GameDifficulty, CompletionCondition } from '../types';
 import { PLATFORMS, GENRES, COMPLETION_CONDITIONS, DIFFICULTIES } from '../constants/initialData';
-import { searchGamesOnline, fetchGameSynopsis, GameSearchResult } from '../services/api';
+import { searchGamesOnline, fetchGameSynopsis, fetchSearchStatus, GameSearchResult, SearchStatus } from '../services/api';
 
 interface GameModalProps {
   isOpen: boolean;
@@ -39,6 +41,8 @@ export const GameModal: React.FC<GameModalProps> = ({
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<GameSearchResult[]>([]);
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+  const [searchStatus, setSearchStatus] = useState<SearchStatus | null>(null);
+  const [preferredProvider, setPreferredProvider] = useState<'auto' | 'rawg' | 'igdb'>('auto');
 
   // Form states
   const [title, setTitle] = useState('');
@@ -88,6 +92,14 @@ export const GameModal: React.FC<GameModalProps> = ({
     }
   };
 
+  const handleInsertPrompt = (promptLabel: string) => {
+    if (!notes.trim()) {
+      setNotes(`[${promptLabel}]: `);
+    } else {
+      setNotes((prev) => `${prev.trim()}\n\n[${promptLabel}]: `);
+    }
+  };
+
   useEffect(() => {
     if (initialGame) {
       setTitle(initialGame.title || '');
@@ -128,21 +140,43 @@ export const GameModal: React.FC<GameModalProps> = ({
     }
   }, [initialGame, isOpen]);
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchSearchStatus().then(setSearchStatus);
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleSearchOnline = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const handleSearchOnline = async (e?: React.FormEvent, directTerm?: string) => {
+    if (e) e.preventDefault();
+    const term = (directTerm !== undefined ? directTerm : searchQuery).trim();
+    if (!term) return;
+
+    if (directTerm !== undefined) {
+      setSearchQuery(directTerm);
+    }
 
     setIsSearching(true);
     setSearchFeedback(null);
     try {
-      const results = await searchGamesOnline(searchQuery.trim());
+      const results = await searchGamesOnline(term, preferredProvider);
       setSearchResults(results);
       if (results.length === 0) {
         setSearchFeedback('Nenhum resultado encontrado. Você pode preencher os campos manualmente.');
       } else {
-        setSearchFeedback(`${results.length} sugestão(ões) encontrada(s) na internet.`);
+        const topSource = results[0]?.source;
+        const sourceLabel = topSource === 'rawg'
+          ? 'RAWG API'
+          : topSource === 'igdb'
+          ? 'IGDB API'
+          : topSource === 'steam'
+          ? 'Steam Store'
+          : topSource === 'curated_database'
+          ? 'Catálogo Curado'
+          : 'Web / IA';
+
+        setSearchFeedback(`${results.length} resultado(s) encontrado(s) via ${sourceLabel}. Clique em um jogo para puxar os dados.`);
       }
     } catch {
       setSearchFeedback('Falha na busca online. Preencha manualmente.');
@@ -181,7 +215,7 @@ export const GameModal: React.FC<GameModalProps> = ({
     }
 
     setSearchResults([]);
-    setSearchFeedback(`Dados importados de "${res.title}" com sucesso!`);
+    setSearchFeedback(`✅ Metadados de "${res.title}" aplicados com sucesso! Capa, ano, estúdio e plataforma preenchidos.`);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -262,36 +296,65 @@ export const GameModal: React.FC<GameModalProps> = ({
         {/* Scrollable Content */}
         <div className="p-5 sm:p-6 overflow-y-auto space-y-6">
 
-          {/* Section: Import Direct from Internet */}
+          {/* Section: Import Direct from Internet (RAWG / IGDB / Steam) */}
           <div className="p-4 rounded-2xl bg-gradient-to-br from-indigo-950/40 via-purple-950/20 to-zinc-900 border border-indigo-500/30">
-            <div className="flex items-center gap-2 mb-2">
-              <Globe className="w-4 h-4 text-indigo-400" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-300">
-                Importar Dados Direto da Internet
-              </h3>
-              <span className="px-2 py-0.5 text-[10px] rounded-full bg-indigo-500/20 text-indigo-300 font-semibold flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" /> Busca Inteligente
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-400" />
+                <h3 className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                  Buscar no Catálogo Online (IGDB / RAWG)
+                </h3>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold border flex items-center gap-1 ${
+                  searchStatus?.rawgConfigured
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                }`}>
+                  RAWG {searchStatus?.rawgConfigured ? '✓' : ''}
+                </span>
+                <span className={`px-2 py-0.5 text-[10px] rounded-full font-semibold border flex items-center gap-1 ${
+                  searchStatus?.igdbConfigured
+                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                }`}>
+                  IGDB {searchStatus?.igdbConfigured ? '✓' : ''}
+                </span>
+              </div>
             </div>
+
             <p className="text-xs text-zinc-400 mb-3">
-              Digite o nome do jogo (ex: <em>Elden Ring, God of War, Zelda, Cyberpunk</em>) para puxar capa, desenvolvedora, ano e gênero automaticamente:
+              Digite o nome de qualquer jogo para buscar capa de alta qualidade, estúdio desenvolvedor, ano de lançamento, gênero e sinopse:
             </p>
 
-            <form onSubmit={handleSearchOnline} className="flex gap-2">
+            <form onSubmit={(e) => handleSearchOnline(e)} className="flex flex-col sm:flex-row gap-2">
               <div className="relative flex-1">
                 <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Nome do jogo..."
+                  placeholder="Ex: Elden Ring, The Witcher 3, Hollow Knight, God of War..."
                   className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl pl-9 pr-3 py-2 text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
+
+              {(searchStatus?.rawgConfigured || searchStatus?.igdbConfigured) && (
+                <select
+                  value={preferredProvider}
+                  onChange={(e) => setPreferredProvider(e.target.value as any)}
+                  className="bg-zinc-950 border border-zinc-700/80 rounded-xl px-2.5 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="auto">Automático (Mais rápido)</option>
+                  {searchStatus?.rawgConfigured && <option value="rawg">RAWG API</option>}
+                  {searchStatus?.igdbConfigured && <option value="igdb">IGDB API</option>}
+                </select>
+              )}
+
               <button
                 type="submit"
                 disabled={isSearching || !searchQuery.trim()}
-                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap"
+                className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer whitespace-nowrap shadow-lg shadow-indigo-600/20"
               >
                 {isSearching ? (
                   <>
@@ -301,51 +364,115 @@ export const GameModal: React.FC<GameModalProps> = ({
                 ) : (
                   <>
                     <Search className="w-4 h-4" />
-                    <span>Buscar na Web</span>
+                    <span>Buscar Jogo</span>
                   </>
                 )}
               </button>
             </form>
 
+            {/* Quick Suggestions Pills */}
+            <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-zinc-400 font-medium">Exemplos rápidos:</span>
+              {['Elden Ring', 'The Witcher 3', 'Hollow Knight', 'God of War', 'Baldur\'s Gate 3', 'Cyberpunk 2077'].map((gameName) => (
+                <button
+                  key={gameName}
+                  type="button"
+                  onClick={() => handleSearchOnline(undefined, gameName)}
+                  disabled={isSearching}
+                  className="px-2 py-0.5 rounded-lg bg-zinc-800/80 hover:bg-zinc-700 border border-zinc-700/60 text-[10px] text-zinc-300 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {gameName}
+                </button>
+              ))}
+            </div>
+
             {searchFeedback && (
-              <p className="text-xs text-indigo-300 mt-2 font-medium">{searchFeedback}</p>
+              <p className="text-xs text-indigo-300 mt-2.5 font-medium flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
+                <span>{searchFeedback}</span>
+              </p>
             )}
 
             {/* Search Results Grid */}
             {searchResults.length > 0 && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-56 overflow-y-auto pr-1">
-                {searchResults.map((result, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => applySearchResult(result)}
-                    className="flex gap-3 p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500 hover:bg-indigo-950/20 transition-all cursor-pointer group text-left"
-                  >
-                    <img
-                      src={result.thumbnail}
-                      alt={result.title}
-                      className="w-14 h-18 rounded-lg object-cover bg-zinc-800 flex-shrink-0 group-hover:scale-105 transition-transform"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-300">
-                        {result.title}
-                      </h4>
-                      <p className="text-[11px] text-zinc-400 mt-0.5">
-                        {result.releaseYear} • {result.developer || 'Estúdio'}
-                      </p>
-                      {result.genres && (
-                        <p className="text-[10px] text-zinc-500 truncate mt-1">
-                          {result.genres.slice(0, 2).join(', ')}
-                        </p>
-                      )}
-                      <span className="inline-flex items-center gap-1 text-[10px] text-indigo-400 font-semibold mt-1">
-                        <Check className="w-3 h-3" /> Usar estes dados
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
+                {searchResults.map((result, idx) => {
+                  const source = result.source || 'web';
+                  let sourceBadge = (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                      Web
+                    </span>
+                  );
+                  if (source === 'rawg') {
+                    sourceBadge = (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        RAWG API
                       </span>
+                    );
+                  } else if (source === 'igdb') {
+                    sourceBadge = (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                        IGDB API
+                      </span>
+                    );
+                  } else if (source === 'steam') {
+                    sourceBadge = (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+                        Steam
+                      </span>
+                    );
+                  } else if (source === 'curated_database') {
+                    sourceBadge = (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        Catálogo Curado
+                      </span>
+                    );
+                  } else if (source === 'gemini') {
+                    sourceBadge = (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                        Gemini AI
+                      </span>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => applySearchResult(result)}
+                      className="flex gap-3 p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 hover:border-indigo-500 hover:bg-indigo-950/20 transition-all cursor-pointer group text-left"
+                    >
+                      <img
+                        src={result.thumbnail}
+                        alt={result.title}
+                        className="w-16 h-20 rounded-lg object-cover bg-zinc-800 flex-shrink-0 group-hover:scale-105 transition-transform shadow-md"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <div className="flex-1 min-w-0 flex flex-col justify-between">
+                        <div>
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <h4 className="text-xs font-bold text-white truncate group-hover:text-indigo-300">
+                              {result.title}
+                            </h4>
+                            {sourceBadge}
+                          </div>
+                          <p className="text-[11px] text-zinc-400">
+                            {result.releaseYear ? `${result.releaseYear} • ` : ''}{result.developer || 'Estúdio'}
+                          </p>
+                          {result.genres && result.genres.length > 0 && (
+                            <p className="text-[10px] text-zinc-500 truncate mt-0.5">
+                              {result.genres.slice(0, 2).join(', ')}
+                            </p>
+                          )}
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[10px] text-indigo-400 font-semibold group-hover:underline mt-1">
+                          <Check className="w-3 h-3" /> Usar estes dados no formulário
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -677,17 +804,71 @@ export const GameModal: React.FC<GameModalProps> = ({
             </div>
 
             {/* Row 8: Personal Review & Notes */}
-            <div>
-              <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
-                Anotações Pessoais & Review do que achou
-              </label>
-              <textarea
-                rows={3}
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="O que achou dos chefes, história, platina, jogabilidade, momentos marcantes..."
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-xs sm:text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-              />
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/25 via-zinc-950 to-zinc-950 border border-purple-500/30 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <PenLine className="w-4 h-4 text-purple-400" />
+                  <label className="text-xs font-bold text-purple-300 uppercase tracking-wider">
+                    Notas & Review Pessoal (Memórias do Zeramento)
+                  </label>
+                </div>
+                {notes.trim().length > 0 && (
+                  <span className="text-[11px] font-medium text-zinc-400 bg-zinc-900/90 px-2 py-0.5 rounded-lg border border-zinc-800">
+                    {notes.trim().split(/\s+/).filter(Boolean).length} palavras • {notes.length} caracteres
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-zinc-400">
+                Documente suas impressões, memórias marcantes, como foi a batalha final, platina ou o que achou da experiência:
+              </p>
+
+              {/* Memory Prompts Inspirations */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
+                  Ideias para registrar:
+                </span>
+                {[
+                  { label: '🌟 Momento Inesquecível', prefix: 'Momento Inesquecível' },
+                  { label: '⚔️ Chefe Mais Marcante', prefix: 'Chefe Mais Marcante' },
+                  { label: '🎵 Trilha Sonora & Arte', prefix: 'Trilha Sonora & Arte' },
+                  { label: '🏆 Desafio / Platina', prefix: 'Desafio para Zerar' },
+                  { label: '💬 Veredito Final', prefix: 'Veredito' },
+                ].map((item) => (
+                  <button
+                    key={item.prefix}
+                    type="button"
+                    onClick={() => handleInsertPrompt(item.prefix)}
+                    className="px-2 py-0.5 rounded-lg bg-purple-950/40 hover:bg-purple-900/50 border border-purple-500/30 text-[10px] text-purple-200 hover:text-white transition-colors cursor-pointer"
+                    title={`Inserir "[${item.prefix}]" na sua análise`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative">
+                <textarea
+                  rows={4}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Escreva aqui sua resenha pessoal: o que mais te surpreendeu, pontos fortes, se teve alguma parte frustrante, memórias de quando zerou ou conselhos para quem vai jogar..."
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors leading-relaxed resize-y min-h-[96px]"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-zinc-500">
+                <span>Esta resenha pessoal fica salva no seu histórico e nos relatórios exportados em PDF e Excel.</span>
+                {notes.trim().length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setNotes('')}
+                    className="text-[10px] text-zinc-400 hover:text-rose-400 transition-colors cursor-pointer ml-2 flex-shrink-0"
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
             </div>
 
           </form>

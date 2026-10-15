@@ -2,39 +2,53 @@ import { db } from './index.ts';
 import { games } from './schema.ts';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Game } from '../types.ts';
+import { INITIAL_GAMES } from '../constants/initialData.ts';
+
+// In-memory fallback games store per user
+const inMemoryGamesByUser = new Map<number, Game[]>();
+
+function getInMemoryGames(userId: number): Game[] {
+  if (!inMemoryGamesByUser.has(userId)) {
+    inMemoryGamesByUser.set(userId, [...INITIAL_GAMES]);
+  }
+  return inMemoryGamesByUser.get(userId)!;
+}
 
 export async function getGamesByDbUserId(userId: number): Promise<Game[]> {
-  try {
-    const records = await db
-      .select()
-      .from(games)
-      .where(eq(games.userId, userId))
-      .orderBy(desc(games.completedDate));
+  if (db) {
+    try {
+      const records = await db
+        .select()
+        .from(games)
+        .where(eq(games.userId, userId))
+        .orderBy(desc(games.completedDate));
 
-    return records.map((r) => ({
-      id: r.id,
-      title: r.title,
-      thumbnail: r.thumbnail,
-      platform: r.platform,
-      genre: r.genre,
-      completionCondition: r.completionCondition as any,
-      rating: r.rating,
-      difficulty: r.difficulty as any,
-      hours: r.hours,
-      completedDate: r.completedDate,
-      releaseYear: r.releaseYear ?? undefined,
-      developer: r.developer ?? undefined,
-      publisher: r.publisher ?? undefined,
-      synopsis: r.synopsis ?? undefined,
-      notes: r.notes ?? undefined,
-      favorite: !!r.favorite,
-      createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
-      updatedAt: r.updatedAt ? r.updatedAt.toISOString() : new Date().toISOString(),
-    }));
-  } catch (error) {
-    console.error('getGamesByDbUserId failed:', error);
-    throw new Error('Failed to retrieve games from database.', { cause: error });
+      return records.map((r) => ({
+        id: r.id,
+        title: r.title,
+        thumbnail: r.thumbnail,
+        platform: r.platform,
+        genre: r.genre,
+        completionCondition: r.completionCondition as any,
+        rating: r.rating,
+        difficulty: r.difficulty as any,
+        hours: r.hours,
+        completedDate: r.completedDate,
+        releaseYear: r.releaseYear ?? undefined,
+        developer: r.developer ?? undefined,
+        publisher: r.publisher ?? undefined,
+        synopsis: r.synopsis ?? undefined,
+        notes: r.notes ?? undefined,
+        favorite: !!r.favorite,
+        createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
+        updatedAt: r.updatedAt ? r.updatedAt.toISOString() : new Date().toISOString(),
+      }));
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL getGames query failed, using in-memory store:', error);
+    }
   }
+
+  return getInMemoryGames(userId);
 }
 
 export async function saveOrUpdateGame(
@@ -42,9 +56,12 @@ export async function saveOrUpdateGame(
   game: Omit<Game, 'id' | 'createdAt' | 'updatedAt'>,
   existingId?: string
 ): Promise<Game> {
-  try {
-    const now = new Date();
-    const gameId = existingId || `game_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const now = new Date();
+  const gameId = existingId || `game_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  if (db) {
+    try {
+
 
     if (existingId) {
       const [updated] = await db
@@ -141,85 +158,131 @@ export async function saveOrUpdateGame(
       createdAt: created.createdAt?.toISOString() || now.toISOString(),
       updatedAt: created.updatedAt?.toISOString() || now.toISOString(),
     };
-  } catch (error) {
-    console.error('saveOrUpdateGame failed:', error);
-    throw new Error('Failed to save game.', { cause: error });
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL saveOrUpdateGame failed, using in-memory store:', error);
+    }
   }
+
+  // In-memory fallback
+  const userGames = getInMemoryGames(userId);
+  if (existingId) {
+    const idx = userGames.findIndex((g) => g.id === existingId);
+    if (idx !== -1) {
+      const updated: Game = {
+        ...userGames[idx],
+        ...game,
+        updatedAt: now.toISOString(),
+      };
+      userGames[idx] = updated;
+      return updated;
+    }
+  }
+
+  const newGame: Game = {
+    ...game,
+    id: gameId,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  };
+  userGames.unshift(newGame);
+  return newGame;
 }
 
 export async function deleteGame(userId: number, gameId: string): Promise<boolean> {
-  try {
-    const res = await db
-      .delete(games)
-      .where(and(eq(games.id, gameId), eq(games.userId, userId)))
-      .returning({ id: games.id });
-    return res.length > 0;
-  } catch (error) {
-    console.error('deleteGame failed:', error);
-    throw new Error('Failed to delete game.', { cause: error });
+  if (db) {
+    try {
+      const res = await db
+        .delete(games)
+        .where(and(eq(games.id, gameId), eq(games.userId, userId)))
+        .returning({ id: games.id });
+      return res.length > 0;
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL deleteGame failed, using in-memory store:', error);
+    }
   }
+
+  const userGames = getInMemoryGames(userId);
+  const idx = userGames.findIndex((g) => g.id === gameId);
+  if (idx !== -1) {
+    userGames.splice(idx, 1);
+    return true;
+  }
+  return false;
 }
 
 export async function toggleGameFavorite(userId: number, gameId: string): Promise<boolean> {
-  try {
-    const existing = await db
-      .select({ favorite: games.favorite })
-      .from(games)
-      .where(and(eq(games.id, gameId), eq(games.userId, userId)))
-      .limit(1);
+  if (db) {
+    try {
+      const existing = await db
+        .select({ favorite: games.favorite })
+        .from(games)
+        .where(and(eq(games.id, gameId), eq(games.userId, userId)))
+        .limit(1);
 
-    if (existing.length === 0) {
-      throw new Error('Game not found.');
+      if (existing.length > 0) {
+        const nextVal = !existing[0].favorite;
+        await db
+          .update(games)
+          .set({ favorite: nextVal, updatedAt: new Date() })
+          .where(and(eq(games.id, gameId), eq(games.userId, userId)));
+
+        return nextVal;
+      }
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL toggleGameFavorite failed, using in-memory store:', error);
     }
-
-    const nextVal = !existing[0].favorite;
-    await db
-      .update(games)
-      .set({ favorite: nextVal, updatedAt: new Date() })
-      .where(and(eq(games.id, gameId), eq(games.userId, userId)));
-
-    return nextVal;
-  } catch (error) {
-    console.error('toggleGameFavorite failed:', error);
-    throw new Error('Failed to toggle game favorite.', { cause: error });
   }
+
+  const userGames = getInMemoryGames(userId);
+  const game = userGames.find((g) => g.id === gameId);
+  if (game) {
+    game.favorite = !game.favorite;
+    game.updatedAt = new Date().toISOString();
+    return game.favorite;
+  }
+  return false;
 }
 
 export async function bulkSyncGames(userId: number, gamesList: Game[]): Promise<Game[]> {
-  try {
-    // Delete existing games for user and insert all provided games
-    await db.delete(games).where(eq(games.userId, userId));
+  if (db) {
+    try {
+      // Delete existing games for user and insert all provided games
+      await db.delete(games).where(eq(games.userId, userId));
 
-    if (gamesList.length === 0) {
-      return [];
+      if (gamesList.length === 0) {
+        return [];
+      }
+
+      const values = gamesList.map((g) => ({
+        id: g.id || `game_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        userId,
+        title: g.title,
+        thumbnail: g.thumbnail,
+        platform: g.platform,
+        genre: g.genre,
+        completionCondition: g.completionCondition,
+        rating: g.rating,
+        difficulty: g.difficulty,
+        hours: g.hours,
+        completedDate: g.completedDate,
+        releaseYear: g.releaseYear ?? null,
+        developer: g.developer ?? null,
+        publisher: g.publisher ?? null,
+        synopsis: g.synopsis ?? null,
+        notes: g.notes ?? null,
+        favorite: !!g.favorite,
+        createdAt: g.createdAt ? new Date(g.createdAt) : new Date(),
+        updatedAt: g.updatedAt ? new Date(g.updatedAt) : new Date(),
+      }));
+
+      await db.insert(games).values(values);
+      return getGamesByDbUserId(userId);
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL bulkSyncGames failed, using in-memory store:', error);
     }
-
-    const values = gamesList.map((g) => ({
-      id: g.id || `game_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      title: g.title,
-      thumbnail: g.thumbnail,
-      platform: g.platform,
-      genre: g.genre,
-      completionCondition: g.completionCondition,
-      rating: g.rating,
-      difficulty: g.difficulty,
-      hours: g.hours,
-      completedDate: g.completedDate,
-      releaseYear: g.releaseYear ?? null,
-      developer: g.developer ?? null,
-      publisher: g.publisher ?? null,
-      synopsis: g.synopsis ?? null,
-      notes: g.notes ?? null,
-      favorite: !!g.favorite,
-      createdAt: g.createdAt ? new Date(g.createdAt) : new Date(),
-      updatedAt: g.updatedAt ? new Date(g.updatedAt) : new Date(),
-    }));
-
-    await db.insert(games).values(values);
-    return getGamesByDbUserId(userId);
-  } catch (error) {
-    console.error('bulkSyncGames failed:', error);
-    throw new Error('Failed to sync games in database.', { cause: error });
   }
+
+  inMemoryGamesByUser.set(userId, [...gamesList]);
+  return gamesList;
 }
+
