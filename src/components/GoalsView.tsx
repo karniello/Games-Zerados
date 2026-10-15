@@ -21,6 +21,7 @@ import {
 import confetti from 'canvas-confetti';
 import { Game, YearlyGoal, BacklogItem, UserProfile } from '../types';
 import { getYearlyGoal, saveYearlyGoal } from '../services/storage';
+import { getAuthToken, fetchCloudGoal, saveCloudGoal } from '../services/api';
 
 interface GoalsViewProps {
   games: Game[];
@@ -48,10 +49,24 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
   // Load goal on year or user change
   useEffect(() => {
+    let active = true;
+    const token = getAuthToken();
+    if (token) {
+      fetchCloudGoal(selectedYear, token).then((cloudGoal) => {
+        if (active && cloudGoal) {
+          setGoal(cloudGoal);
+          setTempTarget(cloudGoal.targetGames);
+          setTempHours(cloudGoal.targetHours || 150);
+          return;
+        }
+      });
+    }
+
     const loaded = getYearlyGoal(currentUser.id, selectedYear);
     setGoal(loaded);
     setTempTarget(loaded.targetGames);
     setTempHours(loaded.targetHours || 150);
+    return () => { active = false; };
   }, [selectedYear, currentUser.id]);
 
   // Filter games completed in the selected year
@@ -82,6 +97,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     };
     setGoal(updated);
     saveYearlyGoal(currentUser.id, updated);
+    const token = getAuthToken();
+    if (token) saveCloudGoal(updated, token);
     setIsEditingGoal(false);
 
     if (completedCount >= updated.targetGames) {
@@ -113,6 +130,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
 
     setGoal(updated);
     saveYearlyGoal(currentUser.id, updated);
+    const token = getAuthToken();
+    if (token) saveCloudGoal(updated, token);
     setNewBacklogTitle('');
   };
 
@@ -123,6 +142,8 @@ export const GoalsView: React.FC<GoalsViewProps> = ({
     };
     setGoal(updated);
     saveYearlyGoal(currentUser.id, updated);
+    const token = getAuthToken();
+    if (token) saveCloudGoal(updated, token);
   };
 
   const handleMarkAsDone = (item: BacklogItem) => {

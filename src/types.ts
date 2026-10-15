@@ -69,5 +69,6 @@ export type ActiveTab =
   | 'matrix' 
   | 'monthly' 
   | 'goals' 
+  | 'analytics'
   | 'backup';
 

@@ -10,7 +10,8 @@ import {
   LogOut, 
   Trophy,
   Sparkles,
-  Target
+  Target,
+  TrendingUp
 } from 'lucide-react';
 import { ActiveTab, UserProfile } from '../types';
 
@@ -120,6 +121,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Target className="w-3.5 h-3.5" />
               <span>Metas</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('analytics')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === 'analytics'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/30'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>Analytics</span>
             </button>
 
             <button
@@ -243,6 +256,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Target className="w-3.5 h-3.5" />
             <span>Metas</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
+              activeTab === 'analytics'
+                ? 'bg-purple-600 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900'
+            }`}
+          >
+            <TrendingUp className="w-3.5 h-3.5" />
+            <span>Analytics</span>
           </button>
           <button
             onClick={() => setActiveTab('backup')}

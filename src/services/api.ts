@@ -1,3 +1,5 @@
+import type { Game, UserProfile, YearlyGoal } from '../types';
+
 export interface GameSearchResult {
   title: string;
   thumbnail: string;
@@ -8,6 +10,28 @@ export interface GameSearchResult {
   genres?: string[];
   averageHours?: number;
   synopsis?: string;
+}
+
+// In-memory token storage (per security guidelines: never stored in localStorage)
+let inMemoryToken: string | null = null;
+
+export function setAuthToken(token: string | null) {
+  inMemoryToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return inMemoryToken;
+}
+
+function getAuthHeaders(overrideToken?: string) {
+  const token = overrideToken || inMemoryToken;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 }
 
 export async function searchGamesOnline(query: string): Promise<GameSearchResult[]> {
@@ -26,7 +50,6 @@ export async function searchGamesOnline(query: string): Promise<GameSearchResult
     return data.games || [];
   } catch (error) {
     console.warn('Erro ao consultar backend, usando fallback local:', error);
-    // Return graceful search result if network or server error
     return [
       {
         title: query,
@@ -65,4 +88,118 @@ export async function fetchGameSynopsis(title: string): Promise<{
   return {
     synopsis: `${title} é uma jornada marcante com desafios empolgantes e narrativa envolvente.`,
   };
+}
+
+// Cloud Database APIs
+export async function fetchCloudUser(token?: string): Promise<UserProfile | null> {
+  try {
+    const res = await fetch('/api/user/me', {
+      headers: getAuthHeaders(token),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to fetch cloud user:', err);
+    return null;
+  }
+}
+
+export async function updateCloudUser(profile: Partial<UserProfile>, token?: string): Promise<UserProfile | null> {
+  try {
+    const res = await fetch('/api/user/profile', {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify(profile),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to update cloud user:', err);
+    return null;
+  }
+}
+
+export async function fetchCloudGames(token?: string): Promise<Game[]> {
+  const res = await fetch('/api/games', {
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) throw new Error('Falha ao carregar jogos da nuvem');
+  const data = await res.json();
+  return data.games || [];
+}
+
+export async function saveCloudGame(
+  game: Omit<Game, 'id' | 'createdAt' | 'updatedAt'>,
+  existingId?: string,
+  token?: string
+): Promise<Game> {
+  const res = await fetch('/api/games', {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ game, existingId }),
+  });
+  if (!res.ok) throw new Error('Falha ao salvar jogo na nuvem');
+  const data = await res.json();
+  return data.game;
+}
+
+export async function deleteCloudGame(id: string, token?: string): Promise<boolean> {
+  const res = await fetch(`/api/games/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) throw new Error('Falha ao remover jogo da nuvem');
+  const data = await res.json();
+  return !!data.success;
+}
+
+export async function toggleCloudGameFavorite(id: string, token?: string): Promise<boolean> {
+  const res = await fetch(`/api/games/${id}/favorite`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) throw new Error('Falha ao alternar favorito');
+  const data = await res.json();
+  return !!data.favorite;
+}
+
+export async function syncCloudGames(gamesList: Game[], token?: string): Promise<Game[]> {
+  const res = await fetch('/api/games/sync', {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ games: gamesList }),
+  });
+  if (!res.ok) throw new Error('Falha ao sincronizar jogos na nuvem');
+  const data = await res.json();
+  return data.games || [];
+}
+
+export async function fetchCloudGoal(year: number, token?: string): Promise<YearlyGoal | null> {
+  try {
+    const res = await fetch(`/api/goals/${year}`, {
+      headers: getAuthHeaders(token),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.goal;
+  } catch (err) {
+    console.warn('Failed to fetch cloud goal:', err);
+    return null;
+  }
+}
+
+export async function saveCloudGoal(goal: YearlyGoal, token?: string): Promise<YearlyGoal | null> {
+  try {
+    const res = await fetch('/api/goals', {
+      method: 'POST',
+      headers: getAuthHeaders(token),
+      body: JSON.stringify({ goal }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.goal;
+  } catch (err) {
+    console.warn('Failed to save cloud goal:', err);
+    return null;
+  }
 }

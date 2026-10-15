@@ -4,6 +4,16 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { requireAuth, type AuthRequest } from './src/middleware/auth.ts';
+import { getOrCreateUser, getUserByUid } from './src/db/users.ts';
+import {
+  getGamesByDbUserId,
+  saveOrUpdateGame,
+  deleteGame,
+  toggleGameFavorite,
+  bulkSyncGames,
+} from './src/db/games.ts';
+import { getGoalByDbUserIdAndYear, saveGoalForDbUser } from './src/db/goals.ts';
 
 dotenv.config();
 process.env.DISABLE_HMR = 'true';
@@ -391,6 +401,163 @@ Retorne um JSON com os campos:
     return res.json({
       synopsis: `${title} é uma jornada marcante repleta de desafios, exploração e momentos memoráveis, oferecendo uma experiência imersiva para o jogador.`,
     });
+  });
+
+  // Helper to resolve or create database user from authenticated request
+  async function resolveDbUser(req: AuthRequest) {
+    if (!req.user || !req.user.uid) {
+      throw new Error('Usuário não autenticado.');
+    }
+    const dbUser = await getOrCreateUser({
+      uid: req.user.uid,
+      email: req.user.email || `${req.user.uid}@gamer.local`,
+      name: (req.user.name as string) || undefined,
+      avatar: (req.user.picture as string) || undefined,
+    });
+    return dbUser;
+  }
+
+  // 1. User & Auth Sync
+  app.get('/api/user/me', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      return res.json({
+        id: dbUser.uid,
+        dbId: dbUser.id,
+        username: dbUser.username || dbUser.email.split('@')[0],
+        name: dbUser.name || dbUser.username || 'Gamer',
+        email: dbUser.email,
+        avatar: dbUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(dbUser.uid)}`,
+        gamerTag: dbUser.gamerTag || `GAMER#${dbUser.id}`,
+        favoritePlatform: dbUser.favoritePlatform || 'PlayStation 5',
+      });
+    } catch (error: any) {
+      console.error('Failed to get user profile:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao carregar perfil' });
+    }
+  });
+
+  app.post('/api/user/profile', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const { name, gamerTag, favoritePlatform, avatar } = req.body;
+      if (!req.user?.uid) {
+        return res.status(401).json({ error: 'Não autorizado' });
+      }
+      const updated = await getOrCreateUser({
+        uid: req.user.uid,
+        email: req.user.email || `${req.user.uid}@gamer.local`,
+        name,
+        gamerTag,
+        favoritePlatform,
+        avatar,
+      });
+      return res.json({
+        id: updated.uid,
+        username: updated.username,
+        name: updated.name,
+        email: updated.email,
+        avatar: updated.avatar,
+        gamerTag: updated.gamerTag,
+        favoritePlatform: updated.favoritePlatform,
+      });
+    } catch (error: any) {
+      console.error('Failed to update user profile:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao atualizar perfil' });
+    }
+  });
+
+  // 2. Games API
+  app.get('/api/games', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const userGames = await getGamesByDbUserId(dbUser.id);
+      return res.json({ games: userGames });
+    } catch (error: any) {
+      console.error('Failed to fetch games:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao buscar jogos' });
+    }
+  });
+
+  app.post('/api/games', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const { game, existingId } = req.body;
+      if (!game || !game.title) {
+        return res.status(400).json({ error: 'Dados do jogo inválidos' });
+      }
+      const saved = await saveOrUpdateGame(dbUser.id, game, existingId);
+      return res.json({ game: saved });
+    } catch (error: any) {
+      console.error('Failed to save game:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao salvar jogo' });
+    }
+  });
+
+  app.delete('/api/games/:id', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const gameId = req.params.id;
+      const success = await deleteGame(dbUser.id, gameId);
+      return res.json({ success });
+    } catch (error: any) {
+      console.error('Failed to delete game:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao excluir jogo' });
+    }
+  });
+
+  app.patch('/api/games/:id/favorite', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const gameId = req.params.id;
+      const favorite = await toggleGameFavorite(dbUser.id, gameId);
+      return res.json({ favorite });
+    } catch (error: any) {
+      console.error('Failed to toggle favorite:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao alternar favorito' });
+    }
+  });
+
+  app.post('/api/games/sync', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const { games: incomingGames } = req.body;
+      if (!Array.isArray(incomingGames)) {
+        return res.status(400).json({ error: 'Lista de jogos inválida' });
+      }
+      const synced = await bulkSyncGames(dbUser.id, incomingGames);
+      return res.json({ games: synced });
+    } catch (error: any) {
+      console.error('Failed to sync games:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao sincronizar jogos' });
+    }
+  });
+
+  // 3. Yearly Goals API
+  app.get('/api/goals/:year', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const year = parseInt(req.params.year, 10) || new Date().getFullYear();
+      const goal = await getGoalByDbUserIdAndYear(dbUser.id, year);
+      return res.json({ goal });
+    } catch (error: any) {
+      console.error('Failed to fetch goals:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao buscar metas' });
+    }
+  });
+
+  app.post('/api/goals', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const { goal } = req.body;
+      if (!goal || typeof goal.year !== 'number') {
+        return res.status(400).json({ error: 'Meta inválida' });
+      }
+      const saved = await saveGoalForDbUser(dbUser.id, goal);
+      return res.json({ goal: saved });
+    } catch (error: any) {
+      console.error('Failed to save goal:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao salvar meta' });
+    }
   });
 
 async function startServer() {

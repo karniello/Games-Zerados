@@ -9,8 +9,14 @@ import {
   RefreshCw, 
   FileJson,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Copy,
+  Code2,
+  ExternalLink,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
+import { isSupabaseConfigured } from '../lib/supabase';
 import { Game, UserProfile } from '../types';
 import { 
   createBackupJSON, 
@@ -324,7 +330,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
             )}
           </div>
 
-          {/* Reset button */}
+            {/* Reset button */}
           <div className="pt-2">
             <button
               onClick={handleResetToDemo}
@@ -336,6 +342,277 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
           </div>
         </div>
 
+      </div>
+
+      {/* Card 3: Supabase Integration & Migrations Card */}
+      <div className="bg-zinc-900 border border-emerald-500/30 rounded-3xl p-6 sm:p-7 shadow-xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-[80px] pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
+                <path d="M11.996 0C5.37 0 0 5.37 0 11.996c0 6.626 5.37 12.004 11.996 12.004 6.626 0 12.004-5.378 12.004-12.004C24 5.37 18.622 0 11.996 0zm-1.07 19.535l-5.63-7.534h4.707l.923-5.228 5.63 7.533h-4.707l-.923 5.229z" />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-bold text-white">Integração Supabase & Migrações</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Pronto
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                Arquivo gerado em <code className="text-emerald-400 font-mono">supabase/migrations/20261015000000_create_gamevault_schema.sql</code>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const sqlContent = `-- Supabase Migration: 20261015000000_create_gamevault_schema.sql
+-- Application: GameVault (Diário de Jogos Zerados)
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  email TEXT NOT NULL,
+  username TEXT,
+  name TEXT,
+  avatar_url TEXT,
+  gamer_tag TEXT,
+  favorite_platform TEXT DEFAULT 'PlayStation 5',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.games (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  genre TEXT NOT NULL,
+  completion_condition TEXT NOT NULL,
+  rating REAL NOT NULL DEFAULT 8.0,
+  difficulty TEXT NOT NULL DEFAULT 'Normal',
+  hours REAL NOT NULL DEFAULT 0,
+  completed_date TEXT NOT NULL,
+  release_year INTEGER,
+  developer TEXT,
+  publisher TEXT,
+  synopsis TEXT,
+  notes TEXT,
+  favorite BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.yearly_goals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  year INTEGER NOT NULL,
+  target_games INTEGER NOT NULL DEFAULT 12,
+  target_hours REAL DEFAULT 200,
+  notes TEXT,
+  backlog JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT yearly_goals_user_year_unique UNIQUE (user_id, year)
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.yearly_goals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can view their own games" ON public.games FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own games" ON public.games FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own games" ON public.games FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own games" ON public.games FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own yearly goals" ON public.yearly_goals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own yearly goals" ON public.yearly_goals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own yearly goals" ON public.yearly_goals FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own yearly goals" ON public.yearly_goals FOR DELETE USING (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, username, avatar_url, gamer_tag)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'user_name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || new.id::text),
+    UPPER(COALESCE(new.raw_user_meta_data->>'user_name', split_part(new.email, '@', 1))) || '#' || floor(random() * 9000 + 1000)::text
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+`;
+                navigator.clipboard.writeText(sqlContent);
+                setStatusMessage({
+                  type: 'success',
+                  text: 'Script SQL de Migração do Supabase copiado para a área de transferência!',
+                });
+              }}
+              className="py-2 px-3.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold border border-zinc-700 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Copy className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Copiar SQL</span>
+            </button>
+
+            <button
+              onClick={() => {
+                const sqlContent = `-- Supabase Migration: 20261015000000_create_gamevault_schema.sql
+-- Application: GameVault (Diário de Jogos Zerados)
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+  email TEXT NOT NULL,
+  username TEXT,
+  name TEXT,
+  avatar_url TEXT,
+  gamer_tag TEXT,
+  favorite_platform TEXT DEFAULT 'PlayStation 5',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.games (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  title TEXT NOT NULL,
+  thumbnail TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  genre TEXT NOT NULL,
+  completion_condition TEXT NOT NULL,
+  rating REAL NOT NULL DEFAULT 8.0,
+  difficulty TEXT NOT NULL DEFAULT 'Normal',
+  hours REAL NOT NULL DEFAULT 0,
+  completed_date TEXT NOT NULL,
+  release_year INTEGER,
+  developer TEXT,
+  publisher TEXT,
+  synopsis TEXT,
+  notes TEXT,
+  favorite BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.yearly_goals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE NOT NULL,
+  year INTEGER NOT NULL,
+  target_games INTEGER NOT NULL DEFAULT 12,
+  target_hours REAL DEFAULT 200,
+  notes TEXT,
+  backlog JSONB DEFAULT '[]'::jsonb,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  CONSTRAINT yearly_goals_user_year_unique UNIQUE (user_id, year)
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.games ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.yearly_goals ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+
+CREATE POLICY "Users can view their own games" ON public.games FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own games" ON public.games FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own games" ON public.games FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own games" ON public.games FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can view their own yearly goals" ON public.yearly_goals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own yearly goals" ON public.yearly_goals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own yearly goals" ON public.yearly_goals FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own yearly goals" ON public.yearly_goals FOR DELETE USING (auth.uid() = user_id);
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, name, username, avatar_url, gamer_tag)
+  VALUES (
+    new.id,
+    new.email,
+    COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'user_name', split_part(new.email, '@', 1)),
+    COALESCE(new.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || new.id::text),
+    UPPER(COALESCE(new.raw_user_meta_data->>'user_name', split_part(new.email, '@', 1))) || '#' || floor(random() * 9000 + 1000)::text
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+`;
+                downloadFile(sqlContent, '20261015000000_create_gamevault_schema.sql', 'application/sql');
+                setStatusMessage({
+                  type: 'success',
+                  text: 'Download do arquivo de migração iniciado (20261015000000_create_gamevault_schema.sql).',
+                });
+              }}
+              className="py-2 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Baixar .sql</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Feature Highlights Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-zinc-300">
+          <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
+            <div className="font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Row Level Security (RLS)</span>
+            </div>
+            <p className="text-zinc-400 text-[11px] leading-relaxed">
+              Políticas de segurança ativas para isolar dados de cada usuário com <code className="text-zinc-300">auth.uid()</code>.
+            </p>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
+            <div className="font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+              <Code2 className="w-3.5 h-3.5" />
+              <span>Tabelas & Triggers</span>
+            </div>
+            <p className="text-zinc-400 text-[11px] leading-relaxed">
+              Tabelas <code className="text-zinc-300">profiles</code>, <code className="text-zinc-300">games</code> e <code className="text-zinc-300">yearly_goals</code> com triggers automáticos de criação.
+            </p>
+          </div>
+
+          <div className="p-3 rounded-2xl bg-zinc-950/70 border border-zinc-800">
+            <div className="font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+              <Database className="w-3.5 h-3.5" />
+              <span>Variáveis de Ambiente</span>
+            </div>
+            <p className="text-zinc-400 text-[11px] leading-relaxed">
+              Configuráveis via <code className="text-zinc-300">VITE_SUPABASE_URL</code> e <code className="text-zinc-300">VITE_SUPABASE_ANON_KEY</code>.
+            </p>
+          </div>
+        </div>
       </div>
 
     </div>

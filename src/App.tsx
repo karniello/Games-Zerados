@@ -18,6 +18,19 @@ import {
   getGamesForUser, 
   saveGamesForUser 
 } from './services/storage';
+import { 
+  getAuthToken, 
+  setAuthToken, 
+  fetchCloudGames, 
+  saveCloudGame, 
+  deleteCloudGame, 
+  toggleCloudGameFavorite, 
+  syncCloudGames,
+  fetchCloudUser
+} from './services/api';
+import { auth } from './lib/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { INITIAL_GAMES } from './constants/initialData';
 import { calculateGamification } from './services/gamification';
 import { Navbar } from './components/Navbar';
 import { AuthScreen } from './components/AuthScreen';
@@ -31,6 +44,7 @@ import { YearlyStatsTable } from './components/YearlyStatsTable';
 import { ScoreDifficultyMatrix } from './components/ScoreDifficultyMatrix';
 import { MonthlyStatsView } from './components/MonthlyStatsView';
 import { GoalsView } from './components/GoalsView';
+import { AnalyticsView } from './components/AnalyticsView';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 
 export default function App() {
@@ -61,43 +75,105 @@ export default function App() {
     onlyFavorites: false,
   });
 
-  // Load games when user changes
+  // Synchronize auth state with Firebase Auth
   useEffect(() => {
-    if (currentUser) {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const token = await firebaseUser.getIdToken();
+          setAuthToken(token);
+          const cloudProfile = await fetchCloudUser(token);
+          if (cloudProfile) {
+            setUser(cloudProfile);
+            setCurrentUser(cloudProfile);
+          }
+          const cloudGames = await fetchCloudGames(token);
+          if (cloudGames.length > 0) {
+            setGames(cloudGames);
+          } else {
+            const synced = await syncCloudGames(INITIAL_GAMES, token);
+            setGames(synced);
+          }
+        } catch (err) {
+          console.warn('Error loading cloud user session:', err);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Load games when user changes (if local user)
+  useEffect(() => {
+    if (currentUser && !getAuthToken()) {
       const userGames = getGamesForUser(currentUser.id);
       setGames(userGames);
-    } else {
-      setGames([]);
     }
   }, [currentUser]);
 
   // Persist games whenever changed
   const updateGamesState = (newGames: Game[]) => {
     setGames(newGames);
-    if (currentUser) {
+    if (currentUser && !getAuthToken()) {
       saveGamesForUser(currentUser.id, newGames);
     }
   };
 
-  const handleLoginSuccess = (user: UserProfile) => {
+  const handleLoginSuccess = async (user: UserProfile, isCloud?: boolean) => {
     setCurrentUser(user);
     setUser(user);
+    if (isCloud) {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const cloudGames = await fetchCloudGames(token);
+          if (cloudGames.length > 0) {
+            setGames(cloudGames);
+          } else {
+            const synced = await syncCloudGames(INITIAL_GAMES, token);
+            setGames(synced);
+          }
+        } catch (err) {
+          console.warn('Failed to load cloud games on login:', err);
+        }
+      }
+    } else {
+      const userGames = getGamesForUser(user.id);
+      setGames(userGames);
+    }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    setAuthToken(null);
+    try {
+      await signOut(auth);
+    } catch {}
     setCurrentUser(null);
     setUser(null);
+    setGames([]);
   };
 
   // Add or Edit Game handler
-  const handleSaveGame = (
+  const handleSaveGame = async (
     gameData: Omit<Game, 'id' | 'createdAt' | 'updatedAt'>,
     existingId?: string
   ) => {
-    const now = new Date().toISOString();
+    const token = getAuthToken();
+    if (token) {
+      try {
+        const saved = await saveCloudGame(gameData, existingId, token);
+        if (existingId) {
+          setGames((prev) => prev.map((g) => (g.id === existingId ? saved : g)));
+        } else {
+          setGames((prev) => [saved, ...prev]);
+        }
+        return;
+      } catch (err) {
+        console.warn('Cloud save failed, falling back to local:', err);
+      }
+    }
 
+    const now = new Date().toISOString();
     if (existingId) {
-      // Update
       const updated = games.map((g) => {
         if (g.id === existingId) {
           return {
@@ -110,7 +186,6 @@ export default function App() {
       });
       updateGamesState(updated);
     } else {
-      // Create new
       const newGame: Game = {
         ...gameData,
         id: 'game_' + Date.now(),
@@ -121,13 +196,29 @@ export default function App() {
     }
   };
 
-  const handleDeleteGame = (id: string) => {
+  const handleDeleteGame = async (id: string) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await deleteCloudGame(id, token);
+      } catch (err) {
+        console.warn('Cloud delete failed:', err);
+      }
+    }
     const updated = games.filter((g) => g.id !== id);
     updateGamesState(updated);
     if (inspectingGame?.id === id) setInspectingGame(null);
   };
 
-  const handleToggleFavorite = (id: string) => {
+  const handleToggleFavorite = async (id: string) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await toggleCloudGameFavorite(id, token);
+      } catch (err) {
+        console.warn('Cloud toggle favorite failed:', err);
+      }
+    }
     const updated = games.map((g) => {
       if (g.id === id) {
         return { ...g, favorite: !g.favorite };
@@ -138,7 +229,17 @@ export default function App() {
   };
 
   // Restore games from backup handler
-  const handleRestoreGames = (restoredGames: Game[]) => {
+  const handleRestoreGames = async (restoredGames: Game[]) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        const synced = await syncCloudGames(restoredGames, token);
+        setGames(synced);
+        return;
+      } catch (err) {
+        console.warn('Cloud restore sync failed:', err);
+      }
+    }
     updateGamesState(restoredGames);
   };
 
@@ -378,7 +479,15 @@ export default function App() {
           />
         )}
 
-        {/* Tab 6: Backup & Restore */}
+        {/* Tab 6: Analytics Trend */}
+        {activeTab === 'analytics' && (
+          <AnalyticsView
+            games={games}
+            onSelectGame={(g) => setInspectingGame(g)}
+          />
+        )}
+
+        {/* Tab 7: Backup & Restore */}
         {activeTab === 'backup' && (
           <BackupRestoreModal
             games={games}
