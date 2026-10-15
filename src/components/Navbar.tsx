@@ -11,7 +11,8 @@ import {
   Trophy,
   Sparkles,
   Target,
-  TrendingUp
+  TrendingUp,
+  User
 } from 'lucide-react';
 import { ActiveTab, UserProfile } from '../types';
 
@@ -146,6 +147,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Database className="w-3.5 h-3.5" />
               <span>Backup</span>
             </button>
+
+            <button
+              onClick={() => setActiveTab('profile')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === 'profile'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-600/30'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Área do Usuário</span>
+            </button>
           </nav>
 
           {/* Actions & Profile */}
@@ -163,9 +176,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-2 pl-2 border-l border-zinc-800">
               <div className="relative group">
                 <div 
-                  onClick={onOpenBadgesModal}
+                  onClick={() => setActiveTab('profile')}
                   className="flex items-center gap-2 px-2 py-1 rounded-xl hover:bg-zinc-900 transition-colors cursor-pointer"
-                  title="Ver perfil de gamer, nível e emblemas"
+                  title="Abrir Área do Usuário e Conexões"
                 >
                   <div className="relative">
                     <img
@@ -188,6 +201,16 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </div>
                 </div>
               </div>
+
+              {onOpenBadgesModal && (
+                <button
+                  onClick={onOpenBadgesModal}
+                  title="Ver Emblemas e Conquistas de Nível"
+                  className="p-1.5 rounded-xl text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                >
+                  <Trophy className="w-4 h-4" />
+                </button>
+              )}
 
               <button
                 onClick={onLogout}
@@ -278,6 +301,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Database className="w-3.5 h-3.5" />
             <span>Backup</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
+              activeTab === 'profile'
+                ? 'bg-indigo-600 text-white'
+                : 'text-zinc-400 hover:bg-zinc-900'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>Área do Usuário</span>
           </button>
         </div>
 

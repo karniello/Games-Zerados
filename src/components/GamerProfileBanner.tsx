@@ -16,12 +16,14 @@ interface GamerProfileBannerProps {
   currentUser: UserProfile;
   gamification: GamificationState;
   onOpenBadgesModal: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const GamerProfileBanner: React.FC<GamerProfileBannerProps> = ({
   currentUser,
   gamification,
   onOpenBadgesModal,
+  onOpenProfile,
 }) => {
   const { 
     totalXp, 
@@ -49,7 +51,11 @@ export const GamerProfileBanner: React.FC<GamerProfileBannerProps> = ({
         <div className="flex items-center gap-4">
           
           {/* Avatar with Level Ring */}
-          <div className="relative">
+          <div 
+            onClick={onOpenProfile || onOpenBadgesModal}
+            className="relative cursor-pointer hover:scale-105 transition-transform"
+            title="Abrir Área do Usuário & Perfil"
+          >
             <img
               src={currentUser.avatar}
               alt={currentUser.name}

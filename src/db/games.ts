@@ -40,6 +40,8 @@ export async function getGamesByDbUserId(userId: number): Promise<Game[]> {
         synopsis: r.synopsis ?? undefined,
         notes: r.notes ?? undefined,
         favorite: !!r.favorite,
+        achievements: r.achievements ? (JSON.parse(r.achievements) as any) : undefined,
+        achievementSummary: r.achievementSummary ? (JSON.parse(r.achievementSummary) as any) : undefined,
         createdAt: r.createdAt ? r.createdAt.toISOString() : new Date().toISOString(),
         updatedAt: r.updatedAt ? r.updatedAt.toISOString() : new Date().toISOString(),
       }));
@@ -82,6 +84,8 @@ export async function saveOrUpdateGame(
           synopsis: game.synopsis ?? null,
           notes: game.notes ?? null,
           favorite: !!game.favorite,
+          achievements: game.achievements ? JSON.stringify(game.achievements) : null,
+          achievementSummary: game.achievementSummary ? JSON.stringify(game.achievementSummary) : null,
           updatedAt: now,
         })
         .where(and(eq(games.id, existingId), eq(games.userId, userId)))
@@ -108,6 +112,8 @@ export async function saveOrUpdateGame(
         synopsis: updated.synopsis ?? undefined,
         notes: updated.notes ?? undefined,
         favorite: !!updated.favorite,
+        achievements: updated.achievements ? (JSON.parse(updated.achievements) as any) : undefined,
+        achievementSummary: updated.achievementSummary ? (JSON.parse(updated.achievementSummary) as any) : undefined,
         createdAt: updated.createdAt?.toISOString() || now.toISOString(),
         updatedAt: updated.updatedAt?.toISOString() || now.toISOString(),
       };
@@ -133,6 +139,8 @@ export async function saveOrUpdateGame(
         synopsis: game.synopsis ?? null,
         notes: game.notes ?? null,
         favorite: !!game.favorite,
+        achievements: game.achievements ? JSON.stringify(game.achievements) : null,
+        achievementSummary: game.achievementSummary ? JSON.stringify(game.achievementSummary) : null,
         createdAt: now,
         updatedAt: now,
       })
@@ -155,6 +163,8 @@ export async function saveOrUpdateGame(
       synopsis: created.synopsis ?? undefined,
       notes: created.notes ?? undefined,
       favorite: !!created.favorite,
+      achievements: created.achievements ? (JSON.parse(created.achievements) as any) : undefined,
+      achievementSummary: created.achievementSummary ? (JSON.parse(created.achievementSummary) as any) : undefined,
       createdAt: created.createdAt?.toISOString() || now.toISOString(),
       updatedAt: created.updatedAt?.toISOString() || now.toISOString(),
     };
@@ -271,6 +281,8 @@ export async function bulkSyncGames(userId: number, gamesList: Game[]): Promise<
         synopsis: g.synopsis ?? null,
         notes: g.notes ?? null,
         favorite: !!g.favorite,
+        achievements: g.achievements ? JSON.stringify(g.achievements) : null,
+        achievementSummary: g.achievementSummary ? JSON.stringify(g.achievementSummary) : null,
         createdAt: g.createdAt ? new Date(g.createdAt) : new Date(),
         updatedAt: g.updatedAt ? new Date(g.updatedAt) : new Date(),
       }));

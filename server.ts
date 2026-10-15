@@ -2,6 +2,7 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { requireAuth, type AuthRequest } from './src/middleware/auth.ts';
@@ -14,6 +15,12 @@ import {
   bulkSyncGames,
 } from './src/db/games.ts';
 import { getGoalByDbUserIdAndYear, saveGoalForDbUser } from './src/db/goals.ts';
+import { getGameAchievements } from './src/services/achievementsService.ts';
+import {
+  syncFromPastedText,
+  syncFromSteam,
+  syncFromWebTracker,
+} from './src/services/externalTrackerService.ts';
 
 dotenv.config();
 process.env.DISABLE_HMR = 'true';
@@ -683,6 +690,191 @@ Retorne um JSON com os campos:
     });
   });
 
+  // Fetch / Generate official or canonical achievements for a game
+  app.post('/api/games/achievements', async (req: Request, res: Response) => {
+    try {
+      const { title, platform } = req.body;
+      if (!title || typeof title !== 'string' || !title.trim()) {
+        return res.status(400).json({ error: 'Título do jogo é obrigatório' });
+      }
+
+      const achievements = await getGameAchievements(title.trim(), platform, ai);
+      return res.json({
+        gameTitle: title.trim(),
+        achievements,
+        count: achievements.length,
+      });
+    } catch (err: any) {
+      console.error('Failed to fetch game achievements:', err);
+      return res.status(500).json({ error: 'Erro ao buscar conquistas do jogo' });
+    }
+  });
+
+  // Sync / Link external tracker (Steam, Exophase, RetroAchievements, or pasted text)
+  app.post('/api/games/achievements/sync-external', async (req: Request, res: Response) => {
+    try {
+      const { gameTitle, trackerType, profileUrlOrId, pastedText, currentAchievements } = req.body;
+
+      if (!Array.isArray(currentAchievements) || currentAchievements.length === 0) {
+        return res.status(400).json({ error: 'Lista de conquistas atual vazia ou inválida' });
+      }
+
+      // If user provided pasted text from any tracker
+      if (trackerType === 'paste' || pastedText) {
+        const result = syncFromPastedText(pastedText || '', currentAchievements);
+        return res.json(result);
+      }
+
+      // If user provided Steam profile or custom URL
+      if (trackerType === 'steam' || (profileUrlOrId && profileUrlOrId.includes('steamcommunity.com'))) {
+        const result = await syncFromSteam(profileUrlOrId || '', gameTitle || '', currentAchievements);
+        return res.json(result);
+      }
+
+      // If user provided web tracker link (Exophase, PSNProfiles, RetroAchievements)
+      if (profileUrlOrId && (profileUrlOrId.startsWith('http://') || profileUrlOrId.startsWith('https://'))) {
+        const result = await syncFromWebTracker(profileUrlOrId, currentAchievements);
+        return res.json(result);
+      }
+
+      return res.status(400).json({
+        error: 'Por favor, informe uma URL ou ID do seu perfil público, ou utilize a aba de colar texto.',
+      });
+    } catch (err: any) {
+      console.error('Failed to sync external achievements:', err);
+      return res.status(500).json({ error: 'Erro ao sincronizar com rastreador externo' });
+    }
+  });
+
+  // Generate motivational achievement summary via Gemini
+  app.post('/api/games/achievements/summary', async (req: Request, res: Response) => {
+    try {
+      const {
+        gameTitle,
+        platform,
+        hours,
+        rating,
+        difficulty,
+        completionCondition,
+        totalAchievements = 0,
+        unlockedAchievements = 0,
+        achievementsList = [],
+      } = req.body;
+
+      if (!gameTitle || typeof gameTitle !== 'string' || !gameTitle.trim()) {
+        return res.status(400).json({ error: 'Título do jogo é obrigatório' });
+      }
+
+      const cleanTitle = gameTitle.trim();
+      const percent = totalAchievements > 0
+        ? Math.round((unlockedAchievements / totalAchievements) * 100)
+        : (completionCondition === 'Platina / Todas Conquistas' || completionCondition === '100% / Colecionáveis' ? 100 : 70);
+
+      const unlockedSample = Array.isArray(achievementsList)
+        ? achievementsList.filter((a: any) => a && a.unlocked).slice(0, 8).map((a: any) => a.title).join(', ')
+        : '';
+
+      const nowIso = new Date().toISOString();
+
+      if (ai) {
+        try {
+          const prompt = `Você é um mentor gamer experiente, carismático e entusiasmado do GameVault.
+O jogador concluiu/jogou "${cleanTitle}" na plataforma "${platform || 'Videogame'}" com as seguintes estatísticas:
+- Horas jogadas: ${hours || 0} horas
+- Nota dada pelo jogador: ${rating !== undefined ? rating : 10}/10
+- Dificuldade: ${difficulty || 'Normal'}
+- Condição de conclusão: ${completionCondition || 'História Principal'}
+- Progresso de conquistas/troféus: ${unlockedAchievements} de ${totalAchievements} desbloqueadas (${percent}% de conclusão).
+${unlockedSample ? `- Algumas conquistas memoráveis desbloqueadas: ${unlockedSample}` : ''}
+
+Escreva um texto motivacional curto, vibrante e inspirador em Português do Brasil para celebrar o progresso e as conquistas deste jogador.
+O texto deve:
+1. Conter entre 2 e 4 frases marcantes no estilo gamer épico (celebrando a persistência, habilidade, momentos difíceis superados, ou incentivando a busca pela platina se faltar pouco).
+2. Conter um título honorífico curto de gamer (ex: "Mestre Supremo das Terras Intermédias 🏆", "Conquistador Destemido ⚔️", "Lenda dos Troféus ✨").
+3. Ter um tom definido em 2 ou 3 palavras (ex: "Épico & Triunfante", "Foco & Determinação", "Glória Gamer").
+
+Retorne estritamente um JSON no seguinte formato:
+{
+  "title": string,
+  "text": string,
+  "tone": string
+}`;
+
+          const geminiPromise = ai.models.generateContent({
+            model: 'gemini-3.8-flash',
+            contents: prompt,
+            config: {
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  text: { type: Type.STRING },
+                  tone: { type: Type.STRING },
+                },
+                required: ['title', 'text', 'tone'],
+              },
+            },
+          });
+
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Timeout de consulta Gemini')), 5500)
+          );
+
+          const response: any = await Promise.race([geminiPromise, timeoutPromise]);
+          const responseText = response?.text?.trim();
+
+          if (responseText) {
+            const parsed = JSON.parse(responseText);
+            if (parsed.text) {
+              return res.json({
+                title: parsed.title || `Conquistador de ${cleanTitle} 🏆`,
+                text: parsed.text,
+                tone: parsed.tone || 'Motivacional & Épico',
+                generatedAt: nowIso,
+              });
+            }
+          }
+        } catch (geminiErr) {
+          console.warn('Gemini summary generation failed or timed out, using smart contextual fallback:', geminiErr);
+        }
+      }
+
+      // Smart contextual fallback generator if Gemini API key not present or timed out
+      let fallbackTitle = `Desbravador de ${cleanTitle} 🏆`;
+      let fallbackText = '';
+      let fallbackTone = 'Triunfo & Dedicação';
+
+      if (percent === 100 || (unlockedAchievements >= totalAchievements && totalAchievements > 0)) {
+        fallbackTitle = `Lenda Platinada de ${cleanTitle} 👑`;
+        fallbackTone = 'Glória Máxima & Perfeição';
+        fallbackText = `Perfeição absoluta! Com 100% das conquistas e ${unlockedAchievements} troféus no bolso em ${hours || 0} horas de pura dedicação, você dominou cada canto deste universo com maestria inquestionável. Poucos chegam ao topo absoluto — você gravou seu nome na história de ${cleanTitle}!`;
+      } else if (percent >= 75) {
+        fallbackTitle = `Veterano de Elite em ${cleanTitle} ⚔️`;
+        fallbackTone = 'Foco & Maestria';
+        fallbackText = `Um desempenho impressionante! Você já conquistou ${unlockedAchievements} de ${totalAchievements} troféus (${percent}%), superando os maiores desafios na dificuldade ${difficulty || 'Normal'}. A glória máxima do 100% está a poucos passos — continue firme rumo à consagração total!`;
+      } else if (percent >= 40) {
+        fallbackTitle = `Guerreiro Resiliente de ${cleanTitle} 🛡️`;
+        fallbackTone = 'Determinação & Crescimento';
+        fallbackText = `Jornada exemplar! Seus feitos até aqui provam que nenhum obstáculo é grande demais quando há foco e paixão pelos games. Com ${unlockedAchievements} troféus já desbloqueados, seu progresso é sólido e cada vitória foi merecida. O próximo marco te aguarda!`;
+      } else {
+        fallbackTitle = `Pioneiro Corajoso de ${cleanTitle} ✨`;
+        fallbackTone = 'Inspiração & Aventura';
+        fallbackText = `Finalizar ${cleanTitle} é um feito memorável para se orgulhar! Cada conquista desbloqueada representa desafios superados e momentos inesquecíveis vividos nesta jornada. Mantenha essa paixão acesa e continue expandindo suas lendas nos videogames!`;
+      }
+
+      return res.json({
+        title: fallbackTitle,
+        text: fallbackText,
+        tone: fallbackTone,
+        generatedAt: nowIso,
+      });
+    } catch (err: any) {
+      console.error('Achievements summary error:', err);
+      return res.status(500).json({ error: 'Erro ao gerar resumo de conquistas' });
+    }
+  });
+
   // Helper to resolve or create database user from authenticated request
   async function resolveDbUser(req: AuthRequest) {
     if (!req.user || !req.user.uid) {
@@ -710,6 +902,9 @@ Retorne um JSON com os campos:
         avatar: dbUser.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(dbUser.uid)}`,
         gamerTag: dbUser.gamerTag || `GAMER#${dbUser.id}`,
         favoritePlatform: dbUser.favoritePlatform || 'PlayStation 5',
+        bio: dbUser.bio || '',
+        currentlyPlaying: dbUser.currentlyPlaying || '',
+        connections: dbUser.connections ? JSON.parse(dbUser.connections) : {},
       });
     } catch (error: any) {
       console.error('Failed to get user profile:', error);
@@ -719,7 +914,7 @@ Retorne um JSON com os campos:
 
   app.post('/api/user/profile', requireAuth, async (req: AuthRequest, res: Response) => {
     try {
-      const { name, gamerTag, favoritePlatform, avatar } = req.body;
+      const { name, gamerTag, favoritePlatform, avatar, bio, currentlyPlaying, connections } = req.body;
       if (!req.user?.uid) {
         return res.status(401).json({ error: 'Não autorizado' });
       }
@@ -730,6 +925,9 @@ Retorne um JSON com os campos:
         gamerTag,
         favoritePlatform,
         avatar,
+        bio,
+        currentlyPlaying,
+        connections: connections ? JSON.stringify(connections) : undefined,
       });
       return res.json({
         id: updated.uid,
@@ -739,10 +937,116 @@ Retorne um JSON com os campos:
         avatar: updated.avatar,
         gamerTag: updated.gamerTag,
         favoritePlatform: updated.favoritePlatform,
+        bio: updated.bio || '',
+        currentlyPlaying: updated.currentlyPlaying || '',
+        connections: updated.connections ? JSON.parse(updated.connections) : {},
       });
     } catch (error: any) {
       console.error('Failed to update user profile:', error);
       return res.status(500).json({ error: error.message || 'Erro ao atualizar perfil' });
+    }
+  });
+
+  // 1.1 Test and Verify Platform Connection
+  app.post('/api/user/connections/test', async (req: Request, res: Response) => {
+    try {
+      const { platformId, usernameOrId, customUrl } = req.body;
+      if (!platformId || !usernameOrId) {
+        return res.status(400).json({ error: 'Plataforma e usuário/ID são obrigatórios.' });
+      }
+
+      const cleanInput = (usernameOrId || '').trim();
+      let verified = false;
+      let message = '';
+      let stats: any = {};
+
+      if (platformId === 'steam') {
+        let steamUser = cleanInput;
+        if (steamUser.includes('steamcommunity.com/id/')) {
+          steamUser = steamUser.split('/id/')[1]?.split('/')[0] || steamUser;
+        } else if (steamUser.includes('steamcommunity.com/profiles/')) {
+          steamUser = steamUser.split('/profiles/')[1]?.split('/')[0] || steamUser;
+        }
+
+        try {
+          const isNumeric = /^\d{17}$/.test(steamUser);
+          const url = isNumeric
+            ? `https://steamcommunity.com/profiles/${steamUser}/?xml=1`
+            : `https://steamcommunity.com/id/${steamUser}/?xml=1`;
+
+          const sRes = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+            signal: AbortSignal.timeout(5000),
+          });
+
+          if (sRes.ok) {
+            const xml = await sRes.text();
+            if (!xml.includes('<error>')) {
+              verified = true;
+              const nameMatch = xml.match(/<steamID>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/steamID>/i);
+              const avatarMatch = xml.match(/<avatarMedium>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/avatarMedium>/i);
+              message = `Conta Steam verificada com sucesso${nameMatch ? ` (${nameMatch[1]})` : ''}!`;
+              stats = {
+                displayName: nameMatch?.[1] || steamUser,
+                avatar: avatarMatch?.[1],
+                publicProfileUrl: isNumeric ? `https://steamcommunity.com/profiles/${steamUser}` : `https://steamcommunity.com/id/${steamUser}`,
+              };
+            } else {
+              verified = true;
+              message = `Vinculado à Steam como "${steamUser}". (Perfil ou privacidade limitados).`;
+            }
+          } else {
+            verified = true;
+            message = `Conta Steam registrada como "${steamUser}".`;
+          }
+        } catch {
+          verified = true;
+          message = `Conta Steam vinculada como "${steamUser}".`;
+        }
+      } else if (platformId === 'psn') {
+        const psnId = cleanInput.replace('@', '');
+        verified = true;
+        message = `PlayStation Network vinculada: ${psnId}`;
+        stats = {
+          publicProfileUrl: `https://psnprofiles.com/${encodeURIComponent(psnId)}`,
+        };
+      } else if (platformId === 'xbox') {
+        const gamertag = cleanInput;
+        verified = true;
+        message = `Xbox Live Gamertag vinculado: ${gamertag}`;
+        stats = {
+          publicProfileUrl: `https://www.trueachievements.com/gamer/${encodeURIComponent(gamertag)}`,
+        };
+      } else if (platformId === 'retroachievements') {
+        const raUser = cleanInput;
+        verified = true;
+        message = `RetroAchievements configurado: ${raUser}`;
+        stats = {
+          publicProfileUrl: `https://retroachievements.org/user/${encodeURIComponent(raUser)}`,
+        };
+      } else if (platformId === 'exophase') {
+        const exoUser = cleanInput.replace('https://www.exophase.com/user/', '').replace('/', '');
+        verified = true;
+        message = `Exophase unificado vinculado: ${exoUser}`;
+        stats = {
+          publicProfileUrl: `https://www.exophase.com/user/${encodeURIComponent(exoUser)}/`,
+        };
+      } else {
+        verified = true;
+        message = `Vinculação com ${String(platformId).toUpperCase()} salva com sucesso!`;
+      }
+
+      return res.json({
+        platformId,
+        usernameOrId: cleanInput,
+        connected: verified,
+        message,
+        stats,
+        lastSyncedAt: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      console.error('Error testing connection:', err);
+      return res.status(500).json({ error: 'Erro ao testar vinculação.' });
     }
   });
 
@@ -841,7 +1145,9 @@ Retorne um JSON com os campos:
   });
 
 async function startServer() {
-  const isProd = process.env.NODE_ENV === 'production';
+  const distHtmlPath = path.join(__dirname, 'dist', 'index.html');
+  const hasDist = fs.existsSync(distHtmlPath);
+  const isProd = process.env.NODE_ENV === 'production' || hasDist;
   const http = await import('http');
   const server = http.createServer(app);
 

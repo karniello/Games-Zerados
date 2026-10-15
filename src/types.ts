@@ -15,6 +15,17 @@ export type GameDifficulty =
   | 'Difícil'
   | 'Muito Difícil';
 
+export type TrophyType = 'platinum' | 'gold' | 'silver' | 'bronze' | 'special';
+
+export interface GameAchievement {
+  id: string;
+  title: string;
+  description: string;
+  type: TrophyType;
+  unlocked: boolean;
+  unlockedAt?: string;
+}
+
 export interface Game {
   id: string;
   title: string;
@@ -32,8 +43,52 @@ export interface Game {
   synopsis?: string;
   notes?: string;
   favorite?: boolean;
+  achievements?: GameAchievement[];
+  achievementSummary?: {
+    title?: string;
+    text: string;
+    tone?: string;
+    generatedAt: string;
+  };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface UserPlatformLink {
+  platformId: 'steam' | 'psn' | 'xbox' | 'nintendo' | 'retroachievements' | 'exophase' | 'epic' | 'gog';
+  usernameOrId: string;
+  customUrl?: string;
+  connected: boolean;
+  lastSyncedAt?: string;
+  autoSync?: boolean;
+  publicProfileUrl?: string;
+  stats?: {
+    gamesCount?: number;
+    achievementsCount?: number;
+    level?: string | number;
+    gamerscore?: number;
+    trophies?: {
+      platinum?: number;
+      gold?: number;
+      silver?: number;
+      bronze?: number;
+    };
+  };
+}
+
+export interface UserConnections {
+  steam?: UserPlatformLink;
+  psn?: UserPlatformLink;
+  xbox?: UserPlatformLink;
+  nintendo?: UserPlatformLink;
+  retroachievements?: UserPlatformLink;
+  exophase?: UserPlatformLink;
+  epic?: UserPlatformLink;
+  gog?: UserPlatformLink;
+  rawgApiKey?: string;
+  igdbClientId?: string;
+  autoSyncOnLogin?: boolean;
+  autoSyncGameAchievements?: boolean;
 }
 
 export interface UserProfile {
@@ -44,6 +99,10 @@ export interface UserProfile {
   avatar: string;
   gamerTag: string;
   favoritePlatform: string;
+  bio?: string;
+  currentlyPlaying?: string;
+  location?: string;
+  connections?: UserConnections;
 }
 
 export interface BacklogItem {
@@ -70,5 +129,7 @@ export type ActiveTab =
   | 'monthly' 
   | 'goals' 
   | 'analytics'
-  | 'backup';
+  | 'backup'
+  | 'profile';
+
 

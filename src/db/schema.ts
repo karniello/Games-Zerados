@@ -10,6 +10,9 @@ export const users = pgTable('users', {
   avatar: text('avatar'),
   gamerTag: text('gamer_tag'),
   favoritePlatform: text('favorite_platform'),
+  bio: text('bio'),
+  currentlyPlaying: text('currently_playing'),
+  connections: text('connections'), // JSON stringified UserConnections
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -33,6 +36,8 @@ export const games = pgTable('games', {
   synopsis: text('synopsis'),
   notes: text('notes'),
   favorite: boolean('favorite').default(false),
+  achievements: text('achievements'), // JSON stringified GameAchievement[]
+  achievementSummary: text('achievement_summary'), // JSON stringified summary
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
 });

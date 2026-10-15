@@ -27,6 +27,33 @@ export function setCurrentUser(user: UserProfile | null) {
   }
 }
 
+export function updateCurrentUserProfile(updatedFields: Partial<UserProfile>): UserProfile | null {
+  const current = getCurrentUser();
+  if (!current) return null;
+  const merged: UserProfile = {
+    ...current,
+    ...updatedFields,
+    connections: {
+      ...current.connections,
+      ...(updatedFields.connections || {}),
+    },
+  };
+  setCurrentUser(merged);
+
+  try {
+    const users = getRegisteredUsers();
+    const idx = users.findIndex(
+      (u) => u.id === current.id || u.username.toLowerCase() === current.username.toLowerCase()
+    );
+    if (idx !== -1) {
+      users[idx] = { ...users[idx], ...merged };
+      localStorage.setItem(USERS_LIST_KEY, JSON.stringify(users));
+    }
+  } catch {}
+
+  return merged;
+}
+
 export function getRegisteredUsers(): StoredUser[] {
   try {
     const raw = localStorage.getItem(USERS_LIST_KEY);

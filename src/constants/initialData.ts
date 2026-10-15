@@ -1,4 +1,4 @@
-import { Game, GameDifficulty, CompletionCondition } from '../types';
+import type { Game, GameDifficulty, CompletionCondition } from '../types.ts';
 
 export const PLATFORMS = [
   'PlayStation 5',
@@ -77,6 +77,14 @@ export const INITIAL_GAMES: Game[] = [
     synopsis: 'Um vasto mundo de fantasia sombria criado por Hidetaka Miyazaki e George R.R. Martin.',
     notes: 'Uma obra-prima absoluta! Conquistei a platina derrotando a Malenia após inúmeras tentativas. Exploração impecável.',
     favorite: true,
+    achievements: [
+      { id: 'er_plat', title: 'O Anel Prístino', description: 'Obteve todas as outras conquistas e tornou-se o Lorde Prístino.', type: 'platinum', unlocked: true, unlockedAt: '2026-03-15T20:00:00.000Z' },
+      { id: 'er_1', title: 'Lorde Prístino', description: 'Chegou ao final da história tornando-se o Lorde Prístino.', type: 'gold', unlocked: true, unlockedAt: '2026-03-15T18:00:00.000Z' },
+      { id: 'er_4', title: 'Malenia, a Deusa da Podridão', description: 'Derrotou a Semideusa Malenia em Elphael.', type: 'silver', unlocked: true, unlockedAt: '2026-03-14T22:30:00.000Z' },
+      { id: 'er_5', title: 'Radahn, o Flagelo Estelar', description: 'Triunfou no festival de combate no Castelo Juba Rubra.', type: 'silver', unlocked: true, unlockedAt: '2026-03-02T19:00:00.000Z' },
+      { id: 'er_10', title: 'Godrick, o Enxertado', description: 'Derrotou o governante do Castelo Tempesvéu.', type: 'bronze', unlocked: true, unlockedAt: '2026-02-25T14:00:00.000Z' },
+      { id: 'er_13', title: 'Armamentos Lendários', description: 'Coletou todas as armas lendárias das Terras Intermédias.', type: 'gold', unlocked: true, unlockedAt: '2026-03-15T19:20:00.000Z' },
+    ],
     createdAt: '2026-03-15T20:00:00.000Z',
     updatedAt: '2026-03-15T20:00:00.000Z',
   },

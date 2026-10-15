@@ -10,6 +10,9 @@ export interface UserInput {
   avatar?: string;
   gamerTag?: string;
   favoritePlatform?: string;
+  bio?: string;
+  currentlyPlaying?: string;
+  connections?: string;
 }
 
 export interface DbUserRecord {
@@ -21,6 +24,9 @@ export interface DbUserRecord {
   avatar: string | null;
   gamerTag: string | null;
   favoritePlatform: string | null;
+  bio?: string | null;
+  currentlyPlaying?: string | null;
+  connections?: string | null;
   createdAt?: Date | null;
 }
 
@@ -33,13 +39,24 @@ export async function getOrCreateUser(input: UserInput): Promise<DbUserRecord> {
     try {
       const existing = await db.select().from(users).where(eq(users.uid, input.uid)).limit(1);
       if (existing.length > 0) {
-        if (input.name || input.avatar || input.gamerTag || input.favoritePlatform) {
+        if (
+          input.name || 
+          input.avatar || 
+          input.gamerTag || 
+          input.favoritePlatform || 
+          input.bio !== undefined || 
+          input.currentlyPlaying !== undefined || 
+          input.connections !== undefined
+        ) {
           const [updated] = await db.update(users)
             .set({
               name: input.name ?? existing[0].name,
               avatar: input.avatar ?? existing[0].avatar,
               gamerTag: input.gamerTag ?? existing[0].gamerTag,
               favoritePlatform: input.favoritePlatform ?? existing[0].favoritePlatform,
+              bio: input.bio !== undefined ? input.bio : existing[0].bio,
+              currentlyPlaying: input.currentlyPlaying !== undefined ? input.currentlyPlaying : existing[0].currentlyPlaying,
+              connections: input.connections !== undefined ? input.connections : existing[0].connections,
             })
             .where(eq(users.uid, input.uid))
             .returning();
@@ -58,6 +75,9 @@ export async function getOrCreateUser(input: UserInput): Promise<DbUserRecord> {
           avatar: input.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(input.uid)}`,
           gamerTag: input.gamerTag || `${defaultUsername.toUpperCase()}#${Math.floor(1000 + Math.random() * 9000)}`,
           favoritePlatform: input.favoritePlatform || 'PlayStation 5',
+          bio: input.bio || null,
+          currentlyPlaying: input.currentlyPlaying || null,
+          connections: input.connections || null,
         })
         .returning();
 
@@ -74,6 +94,9 @@ export async function getOrCreateUser(input: UserInput): Promise<DbUserRecord> {
     if (input.avatar) existingUser.avatar = input.avatar;
     if (input.gamerTag) existingUser.gamerTag = input.gamerTag;
     if (input.favoritePlatform) existingUser.favoritePlatform = input.favoritePlatform;
+    if (input.bio !== undefined) existingUser.bio = input.bio;
+    if (input.currentlyPlaying !== undefined) existingUser.currentlyPlaying = input.currentlyPlaying;
+    if (input.connections !== undefined) existingUser.connections = input.connections;
     return existingUser;
   }
 
@@ -87,6 +110,9 @@ export async function getOrCreateUser(input: UserInput): Promise<DbUserRecord> {
     avatar: input.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(input.uid)}`,
     gamerTag: input.gamerTag || `${defaultUsername.toUpperCase()}#${Math.floor(1000 + Math.random() * 9000)}`,
     favoritePlatform: input.favoritePlatform || 'PlayStation 5',
+    bio: input.bio || null,
+    currentlyPlaying: input.currentlyPlaying || null,
+    connections: input.connections || null,
     createdAt: new Date(),
   };
 

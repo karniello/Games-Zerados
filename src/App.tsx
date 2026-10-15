@@ -16,7 +16,8 @@ import {
   getCurrentUser, 
   setCurrentUser, 
   getGamesForUser, 
-  saveGamesForUser 
+  saveGamesForUser,
+  updateCurrentUserProfile 
 } from './services/storage';
 import { 
   getAuthToken, 
@@ -26,7 +27,8 @@ import {
   deleteCloudGame, 
   toggleCloudGameFavorite, 
   syncCloudGames,
-  fetchCloudUser
+  fetchCloudUser,
+  updateCloudUser
 } from './services/api';
 import { auth } from './lib/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
@@ -46,6 +48,7 @@ import { MonthlyStatsView } from './components/MonthlyStatsView';
 import { GoalsView } from './components/GoalsView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
+import { UserProfileView } from './components/UserProfileView';
 
 export default function App() {
   const [currentUser, setUser] = useState<UserProfile | null>(() => getCurrentUser());
@@ -243,6 +246,24 @@ export default function App() {
     updateGamesState(restoredGames);
   };
 
+  const handleUpdateProfile = async (updatedFields: Partial<UserProfile>) => {
+    const updatedLocal = updateCurrentUserProfile(updatedFields);
+    if (updatedLocal) {
+      setUser(updatedLocal);
+    }
+    const token = getAuthToken();
+    if (token) {
+      try {
+        const updatedCloud = await updateCloudUser(updatedFields, token);
+        if (updatedCloud) {
+          setUser(updatedCloud);
+        }
+      } catch (err) {
+        console.warn('Failed to update cloud profile:', err);
+      }
+    }
+  };
+
   // If not logged in, render AuthScreen
   if (!currentUser) {
     return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
@@ -360,6 +381,7 @@ export default function App() {
               currentUser={currentUser}
               gamification={gamification}
               onOpenBadgesModal={() => setIsBadgesModalOpen(true)}
+              onOpenProfile={() => setActiveTab('profile')}
             />
 
             {/* Filter Bar */}
@@ -496,6 +518,15 @@ export default function App() {
           />
         )}
 
+        {/* Tab 8: User Area / Platform Connections & Gamer Hub */}
+        {activeTab === 'profile' && (
+          <UserProfileView
+            currentUser={currentUser}
+            games={games}
+            onUpdateProfile={handleUpdateProfile}
+          />
+        )}
+
       </main>
 
       {/* Floating Action Button for Quick Add on Mobile */}
@@ -532,6 +563,10 @@ export default function App() {
           setIsAddModalOpen(true);
         }}
         onDelete={handleDeleteGame}
+        onUpdateGame={(updatedGame) => {
+          handleSaveGame(updatedGame, updatedGame.id);
+          setInspectingGame(updatedGame);
+        }}
       />
 
       {/* Badges & Achievements Modal */}

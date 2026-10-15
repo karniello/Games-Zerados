@@ -96,6 +96,17 @@ export const GameCard: React.FC<GameCardProps> = ({
             <span className="px-2 py-0.5 rounded-lg bg-indigo-950/90 backdrop-blur-md text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
               {game.completionCondition}
             </span>
+            {game.achievements && game.achievements.length > 0 && (
+              <span 
+                className="px-2 py-0.5 rounded-lg bg-amber-950/90 backdrop-blur-md text-amber-300 text-[10px] font-bold border border-amber-500/30 flex items-center gap-1 shadow"
+                title={`${game.achievements.filter((a) => a.unlocked).length} de ${game.achievements.length} conquistas desbloqueadas`}
+              >
+                <Trophy className="w-2.5 h-2.5 text-amber-400" />
+                <span>
+                  {game.achievements.filter((a) => a.unlocked).length}/{game.achievements.length}
+                </span>
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -237,9 +248,22 @@ export const GameTableView: React.FC<{
 
                 {/* Condição */}
                 <td className="py-3 px-4">
-                  <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-xs font-semibold">
-                    {g.completionCondition}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-xs font-semibold">
+                      {g.completionCondition}
+                    </span>
+                    {g.achievements && g.achievements.length > 0 && (
+                      <span 
+                        className="px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[11px] font-bold inline-flex items-center gap-1"
+                        title={`${g.achievements.filter((a) => a.unlocked).length} de ${g.achievements.length} conquistas`}
+                      >
+                        <Trophy className="w-3 h-3 text-amber-400" />
+                        <span>
+                          {g.achievements.filter((a) => a.unlocked).length}/{g.achievements.length}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </td>
 
                 {/* Nota */}
