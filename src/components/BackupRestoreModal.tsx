@@ -14,8 +14,14 @@ import {
   Code2,
   ExternalLink,
   ShieldCheck,
-  Check
+  Check,
+  Sparkles,
+  ClipboardPaste,
+  Trophy,
+  Clock,
+  Star
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { isSupabaseConfigured } from '../lib/supabase';
 import { Game, UserProfile } from '../types';
 import { 
@@ -42,12 +48,17 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   const [previewData, setPreviewData] = useState<{
     count: number;
     games: Game[];
+    exportedAt?: string;
+    sourceUser?: string;
   } | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: 'success' | 'error';
     text: string;
   } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [copiedJSON, setCopiedJSON] = useState(false);
+  const [isPastingText, setIsPastingText] = useState(false);
+  const [pastedJsonContent, setPastedJsonContent] = useState('');
 
   // 1. Export JSON Backup
   const handleExportJSON = () => {
@@ -56,6 +67,11 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       const dateStr = new Date().toISOString().split('T')[0];
       const filename = `gamevault_backup_${currentUser.username}_${dateStr}.json`;
       downloadFile(jsonStr, filename, 'application/json');
+      confetti({
+        particleCount: 50,
+        spread: 60,
+        origin: { y: 0.6 },
+      });
       setStatusMessage({
         type: 'success',
         text: `Backup completo exportado com sucesso! Arquivo: ${filename}`,
@@ -64,6 +80,25 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
       setStatusMessage({
         type: 'error',
         text: 'Erro ao gerar arquivo de backup.',
+      });
+    }
+  };
+
+  // 1.1 Copy JSON to clipboard
+  const handleCopyJSON = async () => {
+    try {
+      const jsonStr = createBackupJSON(games, currentUser);
+      await navigator.clipboard.writeText(jsonStr);
+      setCopiedJSON(true);
+      setTimeout(() => setCopiedJSON(false), 2500);
+      setStatusMessage({
+        type: 'success',
+        text: 'JSON de backup copiado para a Área de Transferência!',
+      });
+    } catch {
+      setStatusMessage({
+        type: 'error',
+        text: 'Erro ao copiar para a área de transferência.',
       });
     }
   };
@@ -101,6 +136,8 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         setPreviewData({
           count: res.importedCount,
           games: res.games,
+          exportedAt: res.exportedAt,
+          sourceUser: res.sourceUser,
         });
         setStatusMessage({
           type: 'success',
@@ -117,6 +154,37 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     reader.readAsText(file);
     // reset input value so re-uploading same file triggers event
     e.target.value = '';
+  };
+
+  // 3.1 Handle Pasted JSON
+  const handleParsePastedJSON = () => {
+    if (!pastedJsonContent.trim()) {
+      setStatusMessage({
+        type: 'error',
+        text: 'Cole o texto JSON do backup no campo indicado.',
+      });
+      return;
+    }
+    const res = parseAndValidateBackup(pastedJsonContent);
+    if (res.success) {
+      setPreviewData({
+        count: res.importedCount,
+        games: res.games,
+        exportedAt: res.exportedAt,
+        sourceUser: res.sourceUser,
+      });
+      setIsPastingText(false);
+      setPastedJsonContent('');
+      setStatusMessage({
+        type: 'success',
+        text: `JSON processado com sucesso: ${res.importedCount} jogos identificados.`,
+      });
+    } else {
+      setStatusMessage({
+        type: 'error',
+        text: res.error || 'JSON inválido.',
+      });
+    }
   };
 
   // 4. Apply Restore
@@ -142,6 +210,12 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
         text: `Mesclagem concluída! ${newGamesToAdd.length} novos jogos adicionados (Total: ${merged.length}).`,
       });
     }
+
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 },
+    });
 
     setPreviewData(null);
   };
@@ -202,7 +276,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               Exportar Backup dos Dados
             </h3>
             <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              Gere um arquivo portátil com todos os <strong>{games.length} jogos cadastrados</strong>, incluindo notas, horas, plataformas, thumbnails, anotações pessoais e datas.
+              Gere um arquivo portátil com todos os <strong>{games.length} jogos cadastrados</strong>, incluindo notas, horas, plataformas, thumbnails, anotações pessoais, conquistas e resumos motivacionais da IA.
             </p>
 
             <div className="mt-4 p-3 rounded-2xl bg-zinc-950 border border-zinc-800 text-xs text-zinc-400 space-y-1">
@@ -216,7 +290,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               </div>
               <div className="flex justify-between">
                 <span>Formato de saída:</span>
-                <strong className="text-indigo-400">JSON Estruturado</strong>
+                <strong className="text-indigo-400">JSON Estruturado & CSV</strong>
               </div>
             </div>
           </div>
@@ -230,13 +304,23 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               <span>Baixar Arquivo de Backup (JSON)</span>
             </button>
 
-            <button
-              onClick={handleExportCSV}
-              className="w-full py-2.5 px-4 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold text-xs border border-zinc-700 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-              <span>Exportar Planilha (CSV / Excel)</span>
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleCopyJSON}
+                className="py-2.5 px-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold text-xs border border-zinc-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                {copiedJSON ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-indigo-400" />}
+                <span>{copiedJSON ? 'Copiado!' : 'Copiar JSON'}</span>
+              </button>
+
+              <button
+                onClick={handleExportCSV}
+                className="py-2.5 px-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-semibold text-xs border border-zinc-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Exportar CSV</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -251,7 +335,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               Restaurar Base de Dados
             </h3>
             <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
-              Carregue um arquivo <code className="text-purple-400 font-mono">.json</code> exportado previamente para restaurar sua coleção.
+              Carregue um arquivo <code className="text-purple-400 font-mono">.json</code> exportado previamente ou cole o conteúdo JSON diretamente para restaurar sua coleção.
             </p>
 
             <input
@@ -262,19 +346,66 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
               className="hidden"
             />
 
-            {/* Drop / Upload Zone */}
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-4 border-2 border-dashed border-zinc-700 hover:border-purple-500 rounded-2xl p-6 text-center bg-zinc-950/60 hover:bg-zinc-950 transition-all cursor-pointer group"
-            >
-              <Upload className="w-8 h-8 text-zinc-500 group-hover:text-purple-400 mx-auto mb-2 transition-colors" />
-              <p className="text-xs sm:text-sm font-semibold text-zinc-300 group-hover:text-white">
-                Clique para selecionar o arquivo de backup (.json)
-              </p>
-              <p className="text-[11px] text-zinc-500 mt-1">
-                Compatível com GameVault e exportações JSON de jogos
-              </p>
+            {/* Toggle Upload / Paste Text */}
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setIsPastingText(false)}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+                  !isPastingText
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Arquivo .JSON
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPastingText(true)}
+                className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-all ${
+                  isPastingText
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'bg-zinc-800/80 text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Colar Texto JSON
+              </button>
             </div>
+
+            {!isPastingText ? (
+              /* Drop / Upload Zone */
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="mt-3 border-2 border-dashed border-zinc-700 hover:border-purple-500 rounded-2xl p-6 text-center bg-zinc-950/60 hover:bg-zinc-950 transition-all cursor-pointer group"
+              >
+                <Upload className="w-8 h-8 text-zinc-500 group-hover:text-purple-400 mx-auto mb-2 transition-colors" />
+                <p className="text-xs sm:text-sm font-semibold text-zinc-300 group-hover:text-white">
+                  Clique para selecionar o arquivo de backup (.json)
+                </p>
+                <p className="text-[11px] text-zinc-500 mt-1">
+                  Compatível com GameVault e exportações JSON de jogos
+                </p>
+              </div>
+            ) : (
+              /* Paste JSON Text Area */
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={pastedJsonContent}
+                  onChange={(e) => setPastedJsonContent(e.target.value)}
+                  placeholder='Cole aqui o conteúdo JSON do seu backup (ex: {"games": [...]})'
+                  rows={4}
+                  className="w-full p-3 rounded-2xl bg-zinc-950 border border-zinc-800 focus:border-purple-500 focus:outline-none text-xs text-zinc-300 font-mono resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={handleParsePastedJSON}
+                  className="w-full py-2 px-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <ClipboardPaste className="w-3.5 h-3.5" />
+                  <span>Validar Texto Colado</span>
+                </button>
+              </div>
+            )}
 
             {/* Preview of Parsed Data */}
             {previewData && (
@@ -286,6 +417,30 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
                   <span className="text-sm font-extrabold text-white px-2 py-0.5 rounded bg-purple-500/30">
                     {previewData.count} jogos
                   </span>
+                </div>
+
+                {previewData.sourceUser && (
+                  <p className="text-[11px] text-zinc-400">
+                    Origem do backup: <span className="text-purple-300 font-semibold">{previewData.sourceUser}</span>
+                    {previewData.exportedAt && ` em ${new Date(previewData.exportedAt).toLocaleDateString('pt-BR')}`}
+                  </p>
+                )}
+
+                {/* Quick preview list of game chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {previewData.games.slice(0, 5).map((g, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-lg bg-zinc-900 border border-zinc-700/60 text-[10px] text-zinc-300 truncate max-w-[130px]"
+                    >
+                      {g.title}
+                    </span>
+                  ))}
+                  {previewData.games.length > 5 && (
+                    <span className="px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 text-[10px] font-semibold">
+                      +{previewData.games.length - 5} outros
+                    </span>
+                  )}
                 </div>
 
                 {/* Restoration Mode Selector */}

@@ -25,7 +25,12 @@ import {
   Tv,
   Globe,
   Sliders,
-  Award
+  Award,
+  Monitor,
+  Download,
+  Laptop,
+  Terminal,
+  FileCode
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Game, UserProfile, UserConnections, UserPlatformLink } from '../types.ts';
@@ -59,7 +64,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   onUpdateProfile,
 }) => {
   // Navigation inside User Area
-  const [subTab, setSubTab] = useState<'connections' | 'profile' | 'card' | 'api'>('connections');
+  const [subTab, setSubTab] = useState<'connections' | 'profile' | 'card' | 'api' | 'desktop'>('connections');
+  const [copiedElectron, setCopiedElectron] = useState(false);
+  const [batDownloadSuccess, setBatDownloadSuccess] = useState(false);
 
   // Profile Form state
   const [name, setName] = useState(currentUser.name || '');
@@ -291,6 +298,82 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
     setTimeout(() => setCopiedCard(false), 2500);
   };
 
+  // Download Windows Batch Installer
+  const handleDownloadBat = () => {
+    const appUrl = window.location.origin;
+    const batContent = `@echo off
+chcp 65001 >nul
+title Instalador GameVault Desktop
+color 0B
+cls
+echo ========================================================
+echo       GAMEVAULT - DIÁRIO DE JOGOS ZERADOS
+echo       Criando instalador e atalho na sua Área de Trabalho...
+echo ========================================================
+echo.
+
+set "APP_URL=${appUrl}"
+set "SHORTCUT_NAME=GameVault.lnk"
+set "DESKTOP_PATH=%USERPROFILE%\\Desktop\\%SHORTCUT_NAME%"
+
+echo [1/3] Verificando navegador disponível...
+set "NAV_EXE="
+if exist "%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    set "NAV_EXE=%ProgramFiles(x86)%\\Microsoft\\Edge\\Application\\msedge.exe"
+) else if exist "%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe" (
+    set "NAV_EXE=%ProgramFiles%\\Microsoft\\Edge\\Application\\msedge.exe"
+) else if exist "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe" (
+    set "NAV_EXE=%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe"
+) else if exist "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe" (
+    set "NAV_EXE=%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe"
+) else (
+    set "NAV_EXE=msedge.exe"
+)
+
+echo [2/3] Gerando atalho nativo na Área de Trabalho...
+set "VBS_SCRIPT=%TEMP%\\create_gamevault_shortcut.vbs"
+(
+echo Set oWS = WScript.CreateObject("WScript.Shell"^)
+echo sLinkFile = "%DESKTOP_PATH%"
+echo Set oLink = oWS.CreateShortcut(sLinkFile^)
+echo oLink.TargetPath = "%NAV_EXE%"
+echo oLink.Arguments = "--app=%APP_URL% --window-size=1366,850"
+echo oLink.Description = "GameVault - Diário de Jogos Zerados"
+echo oLink.WindowStyle = 1
+echo oLink.Save
+) > "%VBS_SCRIPT%"
+
+cscript /nologo "%VBS_SCRIPT%"
+del "%VBS_SCRIPT%" >nul 2>&1
+
+echo [3/3] Atalho criado com sucesso!
+echo.
+echo ========================================================
+echo  ✓ GameVault foi instalado na sua Área de Trabalho!
+echo  Clique no ícone criado para abrir em modo Janela Nativa.
+echo ========================================================
+echo.
+echo Deseja abrir o GameVault agora? (S/N)
+set /p ABRIR=
+if /i "%ABRIR%"=="S" (
+    start "" "%DESKTOP_PATH%"
+)
+exit
+`;
+    const blob = new Blob([batContent], { type: 'application/x-bat;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Instalar_GameVault_Desktop.bat';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setBatDownloadSuccess(true);
+    confetti({ particleCount: 50, spread: 50, origin: { y: 0.6 } });
+    setTimeout(() => setBatDownloadSuccess(false), 4000);
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300 pb-16">
       
@@ -471,6 +554,18 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         >
           <Key className="w-4 h-4 text-emerald-400" />
           <span>Chaves & Automação</span>
+        </button>
+
+        <button
+          onClick={() => setSubTab('desktop')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer border ${
+            subTab === 'desktop'
+              ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+              : 'text-zinc-400 hover:text-white border-transparent hover:bg-zinc-800/60'
+          }`}
+        >
+          <Monitor className="w-4 h-4 text-cyan-400" />
+          <span>Instalador PC (.EXE)</span>
         </button>
       </div>
 
@@ -1294,6 +1389,133 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               </button>
             </div>
 
+          </div>
+
+        </div>
+      )}
+
+      {/* 5. SUBTAB 5: Desktop Installer (.EXE & PWA) */}
+      {subTab === 'desktop' && (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          
+          {/* Header */}
+          <div className="p-6 rounded-3xl bg-gradient-to-r from-cyan-950/30 via-zinc-900 to-indigo-950/30 border border-cyan-500/30 relative overflow-hidden">
+            <div className="flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
+                <Monitor className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white flex items-center gap-2">
+                  <span>GameVault Desktop para Windows</span>
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-bold">
+                    PC / Windows 10 & 11
+                  </span>
+                </h3>
+                <p className="text-xs text-zinc-400 mt-1">
+                  Tenha o GameVault instalado diretamente no seu computador com ícone na Área de Trabalho e execução em janela limpa independente.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* Option A: One-click Batch Installer (.bat) */}
+            <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3.5 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 flex items-center justify-center">
+                  <FileCode className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-white">
+                  Instalador com Atalho Windows (.bat)
+                </h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Baixe um instalador leve pré-configurado. Ao executá-lo no Windows, ele cria um atalho nativo na sua Área de Trabalho que abre o GameVault em modo aplicativo sem barras de navegador.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadBat}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold text-xs transition-all shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Baixar Instalador_GameVault_Desktop.bat</span>
+                </button>
+
+                {batDownloadSuccess && (
+                  <p className="text-[11px] text-emerald-400 text-center font-semibold">
+                    ✓ Baixado! Dê 2 cliques no arquivo na pasta Downloads.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Option B: Direct Browser Native App (PWA) */}
+            <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3.5 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <h4 className="text-sm font-bold text-white">
+                  Instalação Direta no Navegador (Chrome / Edge)
+                </h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  No Microsoft Edge ou Chrome, você pode instalar instantaneamente clicando no ícone <strong>⊕</strong> na barra de endereços (topo direito) ou no menu <em>Aplicativos &gt; Instalar GameVault</em>.
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-zinc-950/80 border border-zinc-800 text-xs text-zinc-400 space-y-1">
+                <p className="font-semibold text-zinc-300">Como instalar agora:</p>
+                <p>1. Procure o ícone de instalação (computador com seta) na barra de URL.</p>
+                <p>2. Clique em "Instalar". Um ícone será fixado no Menu Iniciar.</p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Option C: Compile Standalone .EXE with Electron */}
+          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-400">
+                <Terminal className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">
+                  Compilar Executável Offline .EXE com Electron
+                </h4>
+                <p className="text-xs text-zinc-400">
+                  Para gerar o instalador compilado <code>GameVault-Setup-1.0.0.exe</code> localmente via Electron Builder:
+                </p>
+              </div>
+            </div>
+
+            <div className="relative p-3.5 rounded-xl bg-black border border-zinc-800 font-mono text-xs text-emerald-400 overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText('npm install -D electron electron-builder\nnpm run build\nnpx electron-builder --win nsis');
+                  setCopiedElectron(true);
+                  setTimeout(() => setCopiedElectron(false), 2500);
+                }}
+                className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Copiar comandos"
+              >
+                {copiedElectron ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              </button>
+              <pre className="pr-10 whitespace-pre">
+{`# Instalar ferramentas de build
+npm install -D electron electron-builder
+
+# Gerar instalador .exe do Windows
+npm run build
+npx electron-builder --win nsis`}
+              </pre>
+            </div>
+            <p className="text-[11px] text-zinc-500">
+              O arquivo <code>GameVault-Setup-1.0.0.exe</code> será gerado na pasta <code>dist_electron/</code> pronto para distribuição.
+            </p>
           </div>
 
         </div>

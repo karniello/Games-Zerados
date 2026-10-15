@@ -12,7 +12,8 @@ import {
   Sparkles,
   Target,
   TrendingUp,
-  User
+  User,
+  Monitor
 } from 'lucide-react';
 import { ActiveTab, UserProfile } from '../types';
 
@@ -26,6 +27,7 @@ interface NavbarProps {
   playerLevel?: number;
   playerBadgeIcon?: string;
   onOpenBadgesModal?: () => void;
+  onOpenInstallerModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -38,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   playerLevel,
   playerBadgeIcon,
   onOpenBadgesModal,
+  onOpenInstallerModal,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/85 backdrop-blur-md border-b border-zinc-800">
@@ -163,6 +166,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Actions & Profile */}
           <div className="flex items-center gap-2 sm:gap-3">
+            {onOpenInstallerModal && (
+              <button
+                onClick={onOpenInstallerModal}
+                className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 hover:border-zinc-700 text-xs font-semibold transition-all cursor-pointer shadow-sm"
+                title="Instalar App no Computador / Gerar Executável Windows (.EXE)"
+              >
+                <Monitor className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Instalar PC</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenAddModal}
               className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white text-xs sm:text-sm font-bold shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all active:scale-95 cursor-pointer"
@@ -313,6 +327,15 @@ export const Navbar: React.FC<NavbarProps> = ({
             <User className="w-3.5 h-3.5" />
             <span>Área do Usuário</span>
           </button>
+          {onOpenInstallerModal && (
+            <button
+              onClick={onOpenInstallerModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap text-indigo-400 hover:bg-zinc-900 border border-indigo-500/30"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              <span>Instalar PC (.EXE)</span>
+            </button>
+          )}
         </div>
 
       </div>

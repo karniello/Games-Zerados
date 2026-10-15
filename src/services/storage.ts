@@ -163,11 +163,14 @@ export function saveYearlyGoal(userId: string, goal: any): void {
 export function createBackupJSON(games: Game[], user: UserProfile): string {
   const payload = {
     app: 'GameVault',
-    version: '1.0.0',
+    version: '1.2.0',
     exportedAt: new Date().toISOString(),
     user: {
       username: user.username,
       gamerTag: user.gamerTag,
+      name: user.name,
+      favoritePlatform: user.favoritePlatform,
+      connections: user.connections,
     },
     totalGames: games.length,
     games,
@@ -223,6 +226,8 @@ export interface RestoreResult {
   success: boolean;
   importedCount: number;
   games: Game[];
+  exportedAt?: string;
+  sourceUser?: string;
   error?: string;
 }
 
@@ -230,11 +235,15 @@ export function parseAndValidateBackup(jsonString: string): RestoreResult {
   try {
     const data = JSON.parse(jsonString);
     let rawGames: any[] = [];
+    let exportedAt: string | undefined = undefined;
+    let sourceUser: string | undefined = undefined;
 
     if (Array.isArray(data)) {
       rawGames = data;
     } else if (data.games && Array.isArray(data.games)) {
       rawGames = data.games;
+      exportedAt = data.exportedAt;
+      sourceUser = data.user?.username || data.user?.gamerTag;
     } else {
       return { success: false, importedCount: 0, games: [], error: 'Arquivo inválido: nenhuma lista de jogos encontrada.' };
     }
@@ -248,7 +257,7 @@ export function parseAndValidateBackup(jsonString: string): RestoreResult {
       completionCondition: item.completionCondition || 'História Principal',
       rating: typeof item.rating === 'number' ? Math.max(0, Math.min(10, item.rating)) : 8,
       difficulty: item.difficulty || 'Normal',
-      hours: typeof item.hours === 'number' ? item.hours : 10,
+      hours: typeof item.hours === 'number' ? Math.max(0, item.hours) : 10,
       completedDate: item.completedDate || new Date().toISOString().split('T')[0],
       releaseYear: item.releaseYear,
       developer: item.developer,
@@ -256,6 +265,8 @@ export function parseAndValidateBackup(jsonString: string): RestoreResult {
       synopsis: item.synopsis,
       notes: item.notes || '',
       favorite: !!item.favorite,
+      achievements: Array.isArray(item.achievements) ? item.achievements : undefined,
+      achievementSummary: item.achievementSummary && typeof item.achievementSummary === 'object' ? item.achievementSummary : undefined,
       createdAt: item.createdAt || new Date().toISOString(),
       updatedAt: item.updatedAt || new Date().toISOString(),
     }));
@@ -264,6 +275,8 @@ export function parseAndValidateBackup(jsonString: string): RestoreResult {
       success: true,
       importedCount: validatedGames.length,
       games: validatedGames,
+      exportedAt,
+      sourceUser,
     };
   } catch (err: any) {
     return {

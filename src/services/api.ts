@@ -336,5 +336,51 @@ export async function generateAchievementSummary(params: {
   return data;
 }
 
+export interface DatabaseBackupPayload {
+  app: string;
+  formatVersion: string;
+  exportedAt: string;
+  user?: Partial<UserProfile>;
+  gamesCount: number;
+  goalsCount: number;
+  games: Game[];
+  yearlyGoals?: YearlyGoal[];
+}
+
+export async function fetchDatabaseBackup(token?: string): Promise<DatabaseBackupPayload> {
+  const res = await fetch('/api/database/backup', {
+    headers: getAuthHeaders(token),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Erro ao gerar backup da base de dados');
+  }
+  return await res.json();
+}
+
+export async function restoreDatabaseBackup(
+  backupData: any,
+  mode: 'replace' | 'merge' = 'replace',
+  token?: string
+): Promise<{
+  success: boolean;
+  message: string;
+  games: Game[];
+  restoredGamesCount: number;
+  restoredGoalsCount: number;
+}> {
+  const res = await fetch('/api/database/restore', {
+    method: 'POST',
+    headers: getAuthHeaders(token),
+    body: JSON.stringify({ backupData, mode }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || 'Erro ao restaurar base de dados');
+  }
+  return data;
+}
+
+
 
 

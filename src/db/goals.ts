@@ -101,3 +101,39 @@ export async function saveGoalForDbUser(
   return goal;
 }
 
+export async function getAllGoalsByDbUserId(userId: number): Promise<YearlyGoal[]> {
+  if (db) {
+    try {
+      const rows = await db
+        .select()
+        .from(yearlyGoals)
+        .where(eq(yearlyGoals.userId, userId));
+      return rows.map((row) => ({
+        year: row.year,
+        targetGames: row.targetGames,
+        targetHours: row.targetHours ?? 200,
+        notes: row.notes ?? '',
+        backlog: row.backlog ? JSON.parse(row.backlog) : [],
+      }));
+    } catch (error) {
+      console.warn('[AI Studio] PostgreSQL getAllGoals query failed, using in-memory store:', error);
+    }
+  }
+
+  const result: YearlyGoal[] = [];
+  for (const [key, goal] of inMemoryGoals.entries()) {
+    if (key.startsWith(`${userId}_`)) {
+      result.push(goal);
+    }
+  }
+  return result;
+}
+
+export async function bulkRestoreGoalsForDbUser(userId: number, goals: YearlyGoal[]): Promise<void> {
+  for (const g of goals) {
+    if (g && typeof g.year === 'number') {
+      await saveGoalForDbUser(userId, g);
+    }
+  }
+}
+

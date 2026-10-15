@@ -49,6 +49,7 @@ import { GoalsView } from './components/GoalsView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { UserProfileView } from './components/UserProfileView';
+import { DesktopInstallerModal } from './components/DesktopInstallerModal';
 
 export default function App() {
   const [currentUser, setUser] = useState<UserProfile | null>(() => getCurrentUser());
@@ -60,6 +61,7 @@ export default function App() {
   const [editingGame, setEditingGame] = useState<Game | null>(null);
   const [inspectingGame, setInspectingGame] = useState<Game | null>(null);
   const [isBadgesModalOpen, setIsBadgesModalOpen] = useState(false);
+  const [isInstallerModalOpen, setIsInstallerModalOpen] = useState(false);
 
   // Calculate Gamification State (XP, Level, Badges)
   const gamification = useMemo(() => calculateGamification(games), [games]);
@@ -367,6 +369,7 @@ export default function App() {
         playerLevel={gamification.currentLevel.level}
         playerBadgeIcon={gamification.currentLevel.badgeIcon}
         onOpenBadgesModal={() => setIsBadgesModalOpen(true)}
+        onOpenInstallerModal={() => setIsInstallerModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -574,6 +577,12 @@ export default function App() {
         isOpen={isBadgesModalOpen}
         onClose={() => setIsBadgesModalOpen(false)}
         gamification={gamification}
+      />
+
+      {/* Desktop Windows Installer & PWA Modal */}
+      <DesktopInstallerModal
+        isOpen={isInstallerModalOpen}
+        onClose={() => setIsInstallerModalOpen(false)}
       />
 
       {/* Footer */}

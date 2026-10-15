@@ -14,7 +14,12 @@ import {
   toggleGameFavorite,
   bulkSyncGames,
 } from './src/db/games.ts';
-import { getGoalByDbUserIdAndYear, saveGoalForDbUser } from './src/db/goals.ts';
+import {
+  getGoalByDbUserIdAndYear,
+  saveGoalForDbUser,
+  getAllGoalsByDbUserId,
+  bulkRestoreGoalsForDbUser,
+} from './src/db/goals.ts';
 import { getGameAchievements } from './src/services/achievementsService.ts';
 import {
   syncFromPastedText,
@@ -1141,6 +1146,120 @@ Retorne estritamente um JSON no seguinte formato:
     } catch (error: any) {
       console.error('Failed to save goal:', error);
       return res.status(500).json({ error: error.message || 'Erro ao salvar meta' });
+    }
+  });
+
+  // 4. Complete Database Backup & Restore API
+  app.get('/api/database/backup', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const userGames = await getGamesByDbUserId(dbUser.id);
+      const userGoals = await getAllGoalsByDbUserId(dbUser.id);
+
+      const backupData = {
+        app: 'GameVault',
+        formatVersion: '2.0.0',
+        exportedAt: new Date().toISOString(),
+        user: {
+          username: dbUser.username,
+          name: dbUser.name,
+          email: dbUser.email,
+          gamerTag: dbUser.gamerTag,
+          favoritePlatform: dbUser.favoritePlatform,
+          avatar: dbUser.avatar,
+          bio: dbUser.bio,
+          currentlyPlaying: dbUser.currentlyPlaying,
+          connections: dbUser.connections ? JSON.parse(dbUser.connections) : {},
+        },
+        gamesCount: userGames.length,
+        goalsCount: userGoals.length,
+        games: userGames,
+        yearlyGoals: userGoals,
+      };
+
+      return res.json(backupData);
+    } catch (error: any) {
+      console.error('Failed to create database backup:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao gerar backup da base de dados' });
+    }
+  });
+
+  app.post('/api/database/restore', requireAuth, async (req: AuthRequest, res: Response) => {
+    try {
+      const dbUser = await resolveDbUser(req);
+      const { backupData, mode = 'replace' } = req.body;
+
+      if (!backupData) {
+        return res.status(400).json({ error: 'Dados de backup ausentes ou inválidos.' });
+      }
+
+      let rawGames: any[] = [];
+      let rawGoals: any[] = [];
+      let incomingUser: any = null;
+
+      if (Array.isArray(backupData)) {
+        rawGames = backupData;
+      } else if (backupData.games && Array.isArray(backupData.games)) {
+        rawGames = backupData.games;
+        if (backupData.yearlyGoals && Array.isArray(backupData.yearlyGoals)) {
+          rawGoals = backupData.yearlyGoals;
+        }
+        if (backupData.user) {
+          incomingUser = backupData.user;
+        }
+      } else {
+        return res.status(400).json({ error: 'Formato de arquivo não reconhecido. Certifique-se de que é um backup do GameVault.' });
+      }
+
+      // Restore profile info if provided
+      if (incomingUser && (incomingUser.name || incomingUser.gamerTag || incomingUser.connections)) {
+        try {
+          await getOrCreateUser({
+            uid: req.user!.uid,
+            email: req.user!.email || `${req.user!.uid}@gamer.local`,
+            name: incomingUser.name || undefined,
+            gamerTag: incomingUser.gamerTag || undefined,
+            favoritePlatform: incomingUser.favoritePlatform || undefined,
+            avatar: incomingUser.avatar || undefined,
+            bio: incomingUser.bio || undefined,
+            currentlyPlaying: incomingUser.currentlyPlaying || undefined,
+            connections: incomingUser.connections ? JSON.stringify(incomingUser.connections) : undefined,
+          });
+        } catch (profileErr) {
+          console.warn('Profile restore skipped or non-fatal:', profileErr);
+        }
+      }
+
+      // Restore games
+      let finalGames: any[] = [];
+      if (mode === 'replace') {
+        finalGames = await bulkSyncGames(dbUser.id, rawGames);
+      } else {
+        // Merge mode
+        const currentGames = await getGamesByDbUserId(dbUser.id);
+        const currentTitles = new Set(currentGames.map((g: any) => (g.title || '').toLowerCase().trim()));
+        const toAdd = rawGames.filter((g: any) => !currentTitles.has((g.title || '').toLowerCase().trim()));
+        const merged = [...currentGames, ...toAdd];
+        finalGames = await bulkSyncGames(dbUser.id, merged);
+      }
+
+      // Restore yearly goals
+      if (rawGoals.length > 0) {
+        await bulkRestoreGoalsForDbUser(dbUser.id, rawGoals);
+      }
+
+      return res.json({
+        success: true,
+        message: mode === 'replace'
+          ? `Base de dados restaurada com sucesso! ${finalGames.length} jogos carregados.`
+          : `Mesclagem concluída com sucesso! Total na base: ${finalGames.length} jogos.`,
+        games: finalGames,
+        restoredGamesCount: finalGames.length,
+        restoredGoalsCount: rawGoals.length,
+      });
+    } catch (error: any) {
+      console.error('Failed to restore database backup:', error);
+      return res.status(500).json({ error: error.message || 'Erro ao restaurar base de dados' });
     }
   });
 

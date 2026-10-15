@@ -9,6 +9,14 @@
     <meta property="og:description" content="Aplicativo para cadastrar e gerenciar jogos zerados com busca automática na internet, capas, estatísticas detalhadas por ano e mês, matriz de notas e dificuldade, e backup." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="theme-color" content="#09090b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="GameVault" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <script>
       // Runtime constraint: "HMR: Disabled. Ignore WebSocket errors."
       (function() {
@@ -34,6 +42,15 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').catch(function(err) {
+            console.warn('[SW] Registration failed:', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
 
