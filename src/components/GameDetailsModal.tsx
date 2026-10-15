@@ -22,7 +22,7 @@ interface GameDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit: (game: Game) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, game?: Game) => void;
 }
 
 export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
@@ -201,12 +201,9 @@ export const GameDetailsModal: React.FC<GameDetailsModalProps> = ({
         <div className="p-4 sm:p-5 border-t border-zinc-800 bg-zinc-950/70 flex items-center justify-between">
           <button
             onClick={() => {
-              if (window.confirm(`Tem certeza que deseja excluir "${game.title}" da sua lista de zerados?`)) {
-                onDelete(game.id);
-                onClose();
-              }
+              onDelete(game.id, game);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
             <span>Excluir Jogo</span>

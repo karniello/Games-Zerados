@@ -17,7 +17,7 @@ interface GameCardProps {
   game: Game;
   onSelect: (game: Game) => void;
   onEdit: (game: Game) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, game?: Game) => void;
   onToggleFavorite: (id: string) => void;
 }
 
@@ -148,11 +148,7 @@ export const GameCard: React.FC<GameCardProps> = ({
               <Edit3 className="w-3.5 h-3.5" />
             </button>
             <button
-              onClick={() => {
-                if (window.confirm(`Deseja excluir "${game.title}"?`)) {
-                  onDelete(game.id);
-                }
-              }}
+              onClick={() => onDelete(game.id, game)}
               className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
               title="Excluir"
             >
@@ -171,7 +167,7 @@ export const GameTableView: React.FC<{
   games: Game[];
   onSelect: (game: Game) => void;
   onEdit: (game: Game) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, game?: Game) => void;
 }> = ({ games, onSelect, onEdit, onDelete }) => {
   const getDifficultyColor = (diff: GameDifficulty) => {
     switch (diff) {
@@ -282,12 +278,8 @@ export const GameTableView: React.FC<{
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (window.confirm(`Excluir "${g.title}"?`)) {
-                          onDelete(g.id);
-                        }
-                      }}
-                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-400 hover:text-red-400"
+                      onClick={() => onDelete(g.id, g)}
+                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
                       title="Excluir"
                     >
                       <Trash2 className="w-3.5 h-3.5" />

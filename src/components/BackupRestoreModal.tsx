@@ -47,6 +47,7 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
     type: 'success' | 'error';
     text: string;
   } | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // 1. Export JSON Backup
   const handleExportJSON = () => {
@@ -146,15 +147,14 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
   };
 
   // 5. Reset to sample demo games
-  const handleResetToDemo = () => {
-    if (window.confirm('Deseja recarregar a coleção modelo com 10 jogos zerados de demonstração? Isso substituirá sua lista atual.')) {
-      onRestoreGames(INITIAL_GAMES);
-      setStatusMessage({
-        type: 'success',
-        text: 'Coleção padrão de demonstração restaurada com sucesso!',
-      });
-      setPreviewData(null);
-    }
+  const handleExecuteResetToDemo = () => {
+    onRestoreGames(INITIAL_GAMES);
+    setStatusMessage({
+      type: 'success',
+      text: 'Coleção padrão de demonstração restaurada com sucesso!',
+    });
+    setPreviewData(null);
+    setShowResetConfirm(false);
   };
 
   return (
@@ -332,13 +332,39 @@ export const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({
 
             {/* Reset button */}
           <div className="pt-2">
-            <button
-              onClick={handleResetToDemo}
-              className="w-full py-2.5 px-4 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium border border-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Recarregar Coleção Padrão de Demonstração (10 jogos)</span>
-            </button>
+            {!showResetConfirm ? (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                className="w-full py-2.5 px-4 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-xs font-medium border border-zinc-800 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Recarregar Coleção Padrão de Demonstração (10 jogos)</span>
+              </button>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-red-950/30 border border-red-500/40 text-center space-y-2.5 animate-in fade-in duration-150">
+                <p className="text-xs text-red-200 font-medium">
+                  Substituir sua lista atual pelos 10 jogos modelo de demonstração?
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(false)}
+                    className="px-3 py-1.5 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs font-semibold cursor-pointer"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExecuteResetToDemo}
+                    className="px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Sim, Recarregar Demo</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
